@@ -3,13 +3,13 @@
 
 ## Goals
 
-Describe the main statistical methods for analyzing longitudinal data. \n
-Depending on the type and source of the data, what is the best method to use for data analysis? \n
+Describe the main statistical methods for analyzing longitudinal data. \\
+Depending on the type and source of the data, what is the best method to use for data analysis? \\
 Example on sleep data - CPAP compliance and Epworth Sleepiness Scale (ESS) score.
 
 ## Authors
-Ina Jandric \n
-Sébastien Bailly \n
+Ina Jandric \\
+Sébastien Bailly \\
 Ophélie Coiffier
 
 ## License
