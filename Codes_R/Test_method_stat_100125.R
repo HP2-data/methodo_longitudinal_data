@@ -87,6 +87,7 @@ LCA_function <- cbind(T1, T2, T3, T4, T5) ~ 1
 #Choice of the number of clusters using BIC and AIC criterion
 poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 558.8 / AIC = 497.6
 poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 620.5 / AIC = 517.3
+set.seed(234)
 LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 533.5 / AIC = 493.4
 #number chosen = 2
 
@@ -556,17 +557,16 @@ BIC(HMM_final)
 AIC(HMM_final)
 logLik(HMM_final)
 
+#Initial state probability
+init_prob <- matrix(getpars(HMM_final)[1:2], nrow = 1, byrow = T)
+colnames(init_prob) <- c('Non adherent', 'Adherent')
+init_prob
+
 #Transition matrix
-trans_prob <- matrix(getpars(HMM_final)[1:4], nrow = 2, byrow = T)
+trans_prob <- matrix(getpars(HMM_final)[3:6], nrow = 2, byrow = T)
 colnames(trans_prob) <- c('Non adherent', 'Adherent')
 rownames(trans_prob) <- c('Non adherent', 'Adherent')
 trans_prob
-
-#Emission probabilities
-emission_prob <- matrix(getpars(HMM_final)[5:10], nrow = 2, byrow = T)
-colnames(emission_prob) <- c('[0h;2h[', '[2h;4h[', '\u2265 4h')
-rownames(emission_prob) <- c('Non adherent', 'Adherent')
-emission_prob
 
 #Predict the hidden states
 pred_states <- posterior(HMM_final, type = 'viterbi')
