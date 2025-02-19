@@ -17,13 +17,13 @@ sim_data <- function(nb_patient, nb_time_point){
   for(i in 1:nb_patient){
     seed <- i+31
     set.seed(seed)
-    sim_df[i,] <- rnorm(1000, 4, 1.5)
+    sim_df[i,] <- rnorm(nb_time_point, 4, 1.5)
   }
   sim_df <- sim_df %>%
     as.data.frame() %>%
-    mutate(patient_id = seq(1,50,1))
+    mutate(patient_id = seq(1,nb_patient,1))
   
-  names(sim_df) <- c(paste0('T', seq(1, 1000, 1)), 'patient_id')
+  names(sim_df) <- c(paste0('T', seq(1, nb_time_point, 1)), 'patient_id')
   return(sim_df)
 }
 
@@ -46,9 +46,9 @@ sim_data_discrete <- function(nb_patient, nb_time_point, score_max){
   }
   sim_df <- sim_df %>%
     as.data.frame() %>%
-    mutate(patient_id = seq(1,50,1))
+    mutate(patient_id = seq(1,nb_patient,1))
   
-  names(sim_df) <- c(paste0('T', seq(1, 1000, 1)), 'patient_id')
+  names(sim_df) <- c(paste0('T', seq(1, nb_time_point, 1)), 'patient_id')
   return(sim_df)
 }
 

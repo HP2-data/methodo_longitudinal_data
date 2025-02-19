@@ -60,7 +60,7 @@ T3 <- table(ESS_cat$T3, Sim_CPAP_cat$T3)
 T4 <- table(ESS_cat$T4, Sim_CPAP_cat$T4)
 
 #Final table with all data information
-Chi2_test <- array(c(2, 11, 10, 1, 9, 17, 6, 6, 7, 1, 11, 19, 2, 10, 10, 4, 8, 16, 1, 10, 11, 3, 12, 13),
+Chi2_test <- array(c(11, 33, 39, 13, 42, 62, 9, 27, 43, 8, 42, 71, 7, 34, 35, 16, 45, 63, 10, 32, 42, 13, 51, 52),
                    dim = c(3, 2, 4), dimnames = list(Adherence = c('[0h, 2h[', '[2h, 4h[', '\u2265 4h'),
                                                     ESS_score = c('No', 'Yes'),
                                                     Time = c('T1', 'T2', 'T3', 'T4')))
@@ -79,7 +79,8 @@ select <- dplyr::select
 
 #Data set/data preparation
 LCA_data <- Sim_CPAP_cat %>%
-  select(c(T1:T5, patient_id))
+  select(c(T1:T5, patient_id)) %>%
+  mutate_all(as.factor)
 
 LCA_function <- cbind(T1, T2, T3, T4, T5) ~ 1
 
@@ -120,7 +121,7 @@ clus_KML <- cld(Kmeans, timeInData = 2:6, maxNA = 1)
 #2nd: run the kml function to create clusters
 #KLM application
 #We use 15 redrawings for each of the clusters and performed fo 2 to 6 clusters
-kml(clus_KML, nbRedrawing = 15)
+kml(clus_KML, nbRedrawing = 15, toPlot = 'both')
 choice(clus_KML)
 #Best model with 2 clusters: Calinski-Harabatz score higher for 2 clusters,
 #N_A = 66% and N_B = 34%, A fairly stable around 4h and B increases after the 3rd
@@ -245,7 +246,7 @@ GBTM_test22 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 2,
 trajeRBIC(GBTM_test22)
 trajeRAIC(GBTM_test22)
 
-#Quadratic better than linear according to likelihood but BIC diff < 10 so test
+#Linear better than quadratic according to likelihood but BIC diff < 10 so test
 #with cubic curve
 
 #Test with 2 clusters and cubic curve
@@ -254,8 +255,9 @@ GBTM_test32 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 2,
 
 trajeRBIC(GBTM_test32)
 trajeRAIC(GBTM_test32)
-##Linear, quadratic better than cubic curve (BIC and likelihood)
-#Consequently, quadratic curve for the final model
+##Linear and quadratic better than cubic curve (BIC and likelihood) and BIC > 10 for
+#linear vs. cubic unlike quadratic vs. cubic so linear curve better
+#As no diff between linear and quadratic, quadratic curve for the final model
 
 #Test with 3 clusters and quadratic curve
 GBTM_test23 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 3,
@@ -540,6 +542,9 @@ library(depmixS4)
 #Data set/data preparation
 Sim_CPAP_HMM <- Sim_CPAP_cat %>%
   filter(patient_id == 25) %>%
+  select(-'patient_id') %>%
+  t() %>%
+  as.factor() %>%
   as.numeric()
 
 #Hidden Markov application
