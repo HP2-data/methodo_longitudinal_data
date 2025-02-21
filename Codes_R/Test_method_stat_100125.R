@@ -5,6 +5,7 @@
 library(dplyr) #for data manipulation
 library(tidyr) #to arrange data
 library(ggplot2) #for plots
+select <- dplyr::select
 
 source("functions.R") #all functions useful for this code
 
@@ -72,7 +73,6 @@ mantelhaen.test(Chi2_test, correct = F)
 
 #--------------------LCA method-------------------------------------------------
 library(poLCA)
-select <- dplyr::select
 #LCA: how can we identify unmeasured clusters sharing common characteristics?
 #Categorical variables for CPAP adherence
 #All patients but only 5 time points were included
@@ -431,7 +431,6 @@ library(survival) #For Surv() and coxph() functions; fit survival models
 library(survminer) #For ggsurvplot() function; plot the survival models
 library(JMbayes2)   #For jm() function; fit joint model
 library(sjPlot) #For plot_model() function; plot lme regression results
-select <- dplyr::select
 #joint:how can we describe the joint behavior of the evolution of a quantitative
 #longitudinal marker and the time of occurrence of an event considering their joint
 #density?
@@ -499,6 +498,8 @@ summary(Cox_joint)
 
 #Plot results
 ggsurvplot(survfit(Cox_joint), data = Sim_ESS_joint, risk.table = T)
+ggsurvplot(survfit(Surv(Time, ESS_score) ~ Sex + cluster(patient_id), data = Sim_ESS_joint),risk.table = T)
+
 
 #Validation
 cox.zph(Cox_joint) #hypothese de prop des risques relatifs (doit être > 0.05)
