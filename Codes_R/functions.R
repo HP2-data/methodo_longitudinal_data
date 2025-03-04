@@ -1,6 +1,6 @@
-#10/10/2025
-#Methodology for statistical method using longitudinal data
-#Useful functions for sleep data example codes
+#03/04/2025
+#Longitudinal data, trajectories and time series: how to analyze them?
+#An example of sleep data
 
 library(dplyr) #for data manipulation
 
@@ -8,7 +8,7 @@ library(dplyr) #for data manipulation
 #' Simulation data for CPAP adherence (Normal positive data)
 #'
 #' @param nb_patient  integer, number of patients included in the study
-#' @param nb_time_point integer, number of time points
+#' @param nb_time_point integer, number of measuring points
 #'
 #' @returns Normal positive data set simulating CPAP adherence
 sim_data <- function(nb_patient, nb_time_point){
@@ -31,7 +31,7 @@ sim_data <- function(nb_patient, nb_time_point){
 #' Simulation data for ESS score (categorical values from 0 to 24)
 #'
 #' @param nb_patient  integer, number of patients included in the study
-#' @param nb_time_point integer, number of time points
+#' @param nb_time_point integer, number of measuring points
 #' @param score_max integer, the maximum number that the variable can take
 #'
 #' @returns Binomial data set simulating a categorical variable with score_max 
@@ -58,7 +58,7 @@ sim_data_discrete <- function(nb_patient, nb_time_point, score_max){
 #' Plot LCA model
 #'
 #' @param lca_model  LCA model fitted
-#' @returns Barplots, for each time points, of the probability to be in a cluster
+#' @returns Barplots, for each time points, of the probability of belonging to each cluster
 plot_lca <- function(lca_model) {
   probs <- lca_model$probs
   num_classes <- length(probs)
