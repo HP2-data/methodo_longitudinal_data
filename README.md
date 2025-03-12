@@ -1,7 +1,7 @@
 # methodo_stat_donnees_long
 
 
-## Goals
+## Objectives
 
 Describe the main statistical methods for analyzing longitudinal data.   
 Depending on the type and source of the data, what is the best method to use for data analysis?   
