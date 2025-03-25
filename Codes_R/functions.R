@@ -13,11 +13,20 @@ library(dplyr) #for data manipulation
 #' @returns Normal positive data set simulating CPAP adherence
 sim_data <- function(nb_patient, nb_time_point){
   sim_df <- matrix(nrow = nb_patient, ncol = nb_time_point)
-  
-  for(i in 1:nb_patient){
+  for(i in 1:(nb_patient/3)){
+      seed <- i+31
+      set.seed(seed)
+      sim_df[i,] <- rnorm(nb_time_point, 2.2, 1)
+    }
+  for(i in ((nb_patient/3)+1):((nb_patient/3)*2)){
     seed <- i+31
     set.seed(seed)
-    sim_df[i,] <- rnorm(nb_time_point, 4, 1.5)
+    sim_df[i,] <- rnorm(nb_time_point, 6.3, 0.7)
+  }
+  for(i in (2*(nb_patient/3)+1):((nb_patient/3)*3)){
+    seed <- i+31
+    set.seed(seed)
+    sim_df[i,] <- rnorm(nb_time_point, 7.8, 0.5)
   }
   sim_df <- sim_df %>%
     as.data.frame() %>%
@@ -34,7 +43,7 @@ sim_data <- function(nb_patient, nb_time_point){
 #' @param nb_time_point integer, number of measuring points
 #' @param score_max integer, the maximum number that the variable can take
 #'
-#' @returns Binomial data set simulating a categorical variable with score_max 
+#' @returns Beta binomial data set simulating a categorical variable with score_max 
 #' possible values
 sim_data_discrete <- function(nb_patient, nb_time_point, score_max){
   sim_df <- matrix(nrow = nb_patient, ncol = nb_time_point)
@@ -42,7 +51,7 @@ sim_data_discrete <- function(nb_patient, nb_time_point, score_max){
   for(i in 1:nb_patient){
     seed <- i+31
     set.seed(seed)
-    sim_df[i,] <- sample(0:score_max, nb_time_point, replace = T)
+    sim_df[i,] <- rbinom(nb_time_point, score_max, rbeta(nb_time_point, 9, 15))
   }
   sim_df <- sim_df %>%
     as.data.frame() %>%

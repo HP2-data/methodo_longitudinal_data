@@ -13,27 +13,28 @@ source("functions.R") #all functions useful for this code
 #In this section, functions are available in the 'functions.R' file
 #For the simulation, we assume 90 time points (around 3 months) for 300 patients
 
-#Simulation of a continuous variable describing CPAP adherence (N(4, 1.5) with
-#negative values replace by 0)
+#Simulation of a continuous variable describing 3 types of CPAP adherence (N(2.2, 1) 
+#the 1st cluster (non-adherent); N(6.3, 0.7) for the 2nd cluster (adherent); N(7.8, 0.5)
+#for the 3rd cluster (very adherent),with negative values replaced by 0)
 Sim_CPAP <- sim_data(300, 90) %>%
-  mutate_all(~ ifelse(.x < 0, 0, .x))
+  mutate_all(~ ifelse(round(.x) <= 0, 0, .x))
 
 #Simulation of a categorical variable based on the CPAP adherence variable with
 #a threshold at 2h and 4h
 Sim_CPAP_cat <- Sim_CPAP %>%
-  mutate_at(vars(T1:T1000), ~ case_when(.x < 2 ~ '[0h,2h[',
+  mutate_at(vars(T1:T90), ~ case_when(.x < 2 ~ '[0h,2h[',
                          .x >=2 & .x < 4 ~ '[2h,4h[',
                          .x >= 4 ~ '\u2265 4h')) %>%
   mutate_all(~ as.factor(.x))
 
 #Simulation of a discrete variable describing ESS scores (values from 0 to 24)
-Sim_ESS <- sim_data_discrete(300, 90, 24)
+Sim_ESS <- sim_data_discrete(300, 2, 24)
 
 #Simulation of a categorical variable based on the ESS scores variable with
 #a threshold at 10 (Yes = Drowsy patient)
 Sim_ESS_cat <- Sim_ESS %>%
-  mutate_at(vars(T1:T90), ~ ifelse(.x >= 10, 'Yes', 'No')) %>%
-  mutate_at(vars(T1:T90, patient_id), as.factor)
+  mutate_at(vars(T1:T2), ~ ifelse(.x >= 10, 'Yes', 'No')) %>%
+  mutate_at(vars(T1:T2, patient_id), as.factor)
 
 #--------------------ANOVA method-----------------------------------------------
 library(rstatix)
@@ -134,7 +135,7 @@ clus_KML <- cld(Kmeans, timeInData = 2:6, maxNA = 1)
 kml(clus_KML, nbRedrawing = 15, toPlot = 'both')
 choice(clus_KML)
 
-#Best model with 2 clusters: Calinski-Harabatz score higher for 2 clusters,
+#Best model with 2 clusters: Calinski-Harabasz score higher for 2 clusters,
 #N_A = 51% and N_B = 49%, A and B fairly stable around 4h for the 1st 3 measuring points,
 #A decreased while B increased at the 4th time point to finally reverse the trend
 #at the last measuring point
