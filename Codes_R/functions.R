@@ -21,12 +21,12 @@ sim_data <- function(nb_patient, nb_time_point){
   for(i in ((nb_patient/3)+1):((nb_patient/3)*2)){
     seed <- i+31
     set.seed(seed)
-    sim_df[i,] <- rnorm(nb_time_point, 6.3, 0.7)
+    sim_df[i,] <- rnorm(nb_time_point, 4.8, 0.6)
   }
   for(i in (2*(nb_patient/3)+1):((nb_patient/3)*3)){
-    seed <- i+31
+    seed <- i+30
     set.seed(seed)
-    sim_df[i,] <- rnorm(nb_time_point, 7.8, 0.5)
+    sim_df[i,] <- rnorm(nb_time_point, 6.3, 0.7)
   }
   sim_df <- sim_df %>%
     as.data.frame() %>%

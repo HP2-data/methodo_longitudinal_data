@@ -49,29 +49,27 @@ ANOVA_df <- Sim_CPAP %>%
 
 #ANOVA test
 anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id, within = time)
-#p = 0.88 -> we can't say that the CPAP adherence is different at the different 
+#p = 0.92 -> we can't say that the CPAP adherence is different at the different 
 #time point
 
 #--------------------chi² method-----------------------------------------------
 #chi² Mantel-Haenszel: does a categorical variable differ over time?
 #2 nominal variables are conditionally independent in each stratum assuming that
 #there is no 3-way interaction
-#Selection of 4 time points and calculation of contingency table for the chi² test
+#Selection of 2 time points (ESS score measured at 2 time points only) and
+#calculation of contingency table for the chi² test
 #All patients were included
 
 #Contingency table for each time point
 T1 <- table(Sim_ESS_cat$T1, Sim_CPAP_cat$T1)
 T2 <- table(Sim_ESS_cat$T2, Sim_CPAP_cat$T2)
-T3 <- table(Sim_ESS_cat$T3, Sim_CPAP_cat$T3)
-T4 <- table(Sim_ESS_cat$T4, Sim_CPAP_cat$T4)
 
 #Final table with all data information
-Chi2_test <- array(c(9, 47, 67, 18, 67, 92, 5, 49, 67, 19, 75, 85, 7, 43, 62, 25,
-                     73, 90, 20, 50, 58, 17, 69, 86),
-                   dim = c(3, 2, 4),
+Chi2_test <- array(c(32, 25, 118, 11, 29, 85, 31, 27, 116, 9, 32, 85),
+                   dim = c(3, 2, 2),
                    dimnames = list(Adherence = c('[0h, 2h[', '[2h, 4h[', '\u2265 4h'),
                                                     ESS_score = c('No', 'Yes'),
-                                                    Time = c('T1', 'T2', 'T3', 'T4')))
+                                                    Time = c('T1', 'T2')))
 
 #Mantel-Haenszel test
 mantelhaen.test(Chi2_test, correct = F)
