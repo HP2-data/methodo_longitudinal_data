@@ -14,7 +14,7 @@ source("functions.R") #all functions useful for this code
 #For the simulation, we assume 90 time points (around 3 months) for 300 patients
 
 #Simulation of a continuous variable describing 3 types of CPAP adherence (N(2.2, 1) 
-#the 1st cluster (non-adherent); N(6.3, 0.7) for the 2nd cluster (adherent); N(7.8, 0.5)
+#the 1st cluster (non-adherent); N(4.8, 0.6) for the 2nd cluster (adherent); N(6.3, 0.7)
 #for the 3rd cluster (very adherent),with negative values replaced by 0)
 Sim_CPAP <- sim_data(300, 90) %>%
   mutate_all(~ ifelse(round(.x) <= 0, 0, .x))
@@ -49,7 +49,7 @@ ANOVA_df <- Sim_CPAP %>%
 
 #ANOVA test
 anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id, within = time)
-#p = 0.92 -> we can't say that the CPAP adherence is different at the different 
+#p = 0.09 -> we can't say that the CPAP adherence is different at the different 
 #time point
 
 #--------------------chi² method-----------------------------------------------
@@ -65,7 +65,7 @@ T1 <- table(Sim_ESS_cat$T1, Sim_CPAP_cat$T1)
 T2 <- table(Sim_ESS_cat$T2, Sim_CPAP_cat$T2)
 
 #Final table with all data information
-Chi2_test <- array(c(32, 25, 118, 11, 29, 85, 31, 27, 116, 9, 32, 85),
+Chi2_test <- array(c(32,36, 107, 11, 30, 84, 31, 33, 110, 9, 33, 84),
                    dim = c(3, 2, 2),
                    dimnames = list(Adherence = c('[0h, 2h[', '[2h, 4h[', '\u2265 4h'),
                                                     ESS_score = c('No', 'Yes'),
@@ -73,70 +73,36 @@ Chi2_test <- array(c(32, 25, 118, 11, 29, 85, 31, 27, 116, 9, 32, 85),
 
 #Mantel-Haenszel test
 mantelhaen.test(Chi2_test, correct = F)
-#p = 0.28 --> the OR doesn't draw away from 1 
-# --> the difference between groups is not really evident
-
-#--------------------LCA method-------------------------------------------------
-library(poLCA)
-#LCA: how can we identify unmeasured clusters sharing common characteristics?
-#Categorical variables for CPAP adherence
-#All patients but only 5 time points were included
-
-#Data set/data preparation
-LCA_data <- Sim_CPAP_cat %>%
-  select(c(T1:T5, patient_id)) %>%
-  mutate_all(as.factor)
-
-LCA_function <- cbind(T1, T2, T3, T4, T5) ~ 1
-
-#LCA application
-#Choice of the number of clusters using BIC and AIC criterion
-set.seed(234)
-poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 2943.5 / AIC = 2825.0
-
-set.seed(234)
-poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 3048.3 / AIC = 2848.3
-
-set.seed(234)
-LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 2899.6 / AIC = 2821.8
-#number chosen = 2
-
-#Class membership probabilities
-LCA_test$P
-
-#Item-response probabilities
-LCA_test$probs
-
-#Example visualization of item-response probabilities
-#source: https://www.geeksforgeeks.org/latent-class-analysis-in-r/
-plot_lca(LCA_test)
+#p < 0.01 --> the OR does draw away from 1 
+# --> there is a difference between groups
 
 #--------------------K-means method---------------------------------------------
 library(kml)
 #KML: how can we analyze clusters trajectories to study and predict variations
 #over time?
 #Numerical variables: continuous CPAP adherence
-#All patients but only 5 time points were included
+#All patients and all time points were included
 
 #Data set/data preparation
 Kmeans <- Sim_CPAP %>%
-  select(patient_id, T1:T5) %>%
+  select(patient_id, T1:T90) %>%
   mutate_at(vars(patient_id), as.character)
   
 
 #1st: transform the long format data into clusterLongData with the function cld()
-clus_KML <- cld(Kmeans, timeInData = 2:6, maxNA = 1)
+clus_KML <- cld(Kmeans, timeInData = 2:91, maxNA = 1)
 
 #2nd: run the kml function to create clusters
 #KLM application
 #We use 15 redrawings for each of the clusters and performed fo 2 to 6 clusters
-kml(clus_KML, nbRedrawing = 15, toPlot = 'both')
+kml(clus_KML, nbRedrawing = 15)
 choice(clus_KML)
 
-#Best model with 2 clusters: Calinski-Harabasz score higher for 2 clusters,
-#N_A = 51% and N_B = 49%, A and B fairly stable around 4h for the 1st 3 measuring points,
-#A decreased while B increased at the 4th time point to finally reverse the trend
-#at the last measuring point
+#Best model with 3 clusters: Calinski-Harabasz score higher for 3 clusters,
+#N = 33% for each group, the cluster C decreased its adherence over the 90 time points,
+#the cluster B decreased its adherence from the 31st time point to the 60th then
+#increased up to the 90th time point, the cluster A increased from the 30th time
+#point to the 60th time point then decreased over the last 30 time points
 
 #--------------------LTA method-------------------------------------------------
 #source: https://github.com/cran/LMest/blob/master/R/lmest.R
@@ -162,9 +128,9 @@ Sim_CPAP_LTA <- Sim_CPAP_cat %>%
 lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
                   start = 1, seed = 123, maxit = 5000, modBasic = 1, k = 2:4)
 
-#Best model for 2 clusters
+#Best model for 3 clusters
 LTA_final_model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
-                         start = 1, seed = 123, maxit = 5000, modBasic = 1, k = 2)
+                         start = 1, seed = 123, maxit = 5000, modBasic = 1, k = 3)
 
 summary(LTA_final_model)
 
@@ -180,7 +146,7 @@ library(trajeR)
 #GBTM: how can we analyze clusters trajectories to study and predict variations
 #over time
 #In columns: patient id, CPAP adherence (numeric), time points (numeric)
-#All patients but only 5 time points were included
+#All patients but only 5 time points were included (faster calculation)
 
 #Data set/data preparation
 Sim_ESS_GBTM <- Sim_ESS %>%
@@ -207,8 +173,8 @@ GBTM_test22 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 2,
 trajeRBIC(GBTM_test22)
 trajeRAIC(GBTM_test22)
 
-#Linear better than quadratic according to likelihood and BIC diff > 10 so final
-#curve = linear, but test with cubic for the example
+#Linear better than quadratic according to likelihood but BIC diff < 10 so
+#test with cubic curve
 
 #Test with 2 clusters and cubic curve
 GBTM_test32 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 2,
@@ -217,26 +183,25 @@ GBTM_test32 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 2,
 trajeRBIC(GBTM_test32)
 trajeRAIC(GBTM_test32)
 
-#Then, test with linear curve but different number of clusters
-#Test with 3 clusters and linear curve
-GBTM_test13 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 3,
-                      degre = rep(1, 3), Model = 'CNORM')
+#BIC difference > 10 so final model uses quadratic curve
+#Then, test with quadratic curve but different number of clusters
+#Test with 3 clusters and quadratic curve
+GBTM_test23 <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = 3,
+                      degre = rep(2, 3), Model = 'CNORM')
 
-trajeRBIC(GBTM_test13)
-trajeRAIC(GBTM_test13)
+trajeRBIC(GBTM_test23)
+trajeRAIC(GBTM_test23)
 
-adequacy(GBTM_test12, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11]) 
-adequacy(GBTM_test13, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11]) 
-#AvePP >= 0.7 for one cluster in the 1st model
-#No proportion of assignment at the 1st cluster in the 3-clusters model and at 
-#the 1st and 2nd cluster in the 4-cluster model
-#2 clusters better than 3 or 4 clusters for BIC criteria and likelihood too
+adequacy(GBTM_test22, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11]) 
+adequacy(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11]) 
+#AvePP >= 0.7
+#3 clusters better than 2 or 4 clusters for BIC criteria and likelihood too
 
 #Plot trajectories
-plotrajeR(GBTM_test12)
+plotrajeR(GBTM_test23)
 
 #Probability of belonging for each patient
-GroupProb(GBTM_test12, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
+GroupProb(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
 
 #--------------------Mixed method-----------------------------------------------
 library(lme4)
@@ -253,7 +218,8 @@ Sim_CPAP_mixed <- Sim_CPAP %>%
   mutate_at(vars(patient_id, Time), as.factor) %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-'T') %>%
-  mutate_at(vars(Time), ~ factor(.x, levels = sort(unique(as.numeric(.x))))) #ordered values
+  mutate_at(vars(Time), ~ factor(.x, levels = sort(unique(as.numeric(.x))))) %>% #ordered values
+  mutate_at(vars(Time), as.numeric) #according to the research question (run or not this line)
 
 #ESS at baseline (T1) = adjustment factor
 Sim_ESS_mixed <- Sim_ESS_cat %>%
@@ -280,7 +246,7 @@ library(lcmm)
 #GMM: how can we describe trajectories of longitudinal data with repeated measurement
 #of follow-up?
 #Continuous data for CPAP adherence
-#All patients but only 5 time points were included
+#All patients but only 5 time points were included (long runtimes with many time points)
 
 #Data set/data preparation
 #Data in long format
@@ -308,11 +274,11 @@ GMM_test4 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
                              mixture= ~ Time, nwg = T))
 summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
 
-#Better BIC = 2 clusters, distribution of patients ok
-summary(GMM_test2)
+#Better BIC = 3 clusters, distribution of patients ok
+summary(GMM_test3)
 
 #Posterior probabilities
-postprob(GMM_test2)
+postprob(GMM_test3)
 
 #Plot fixed effect in the longitudinal model
 #Create a table with names of the variables, coefficients, CI_inf, CI_sup, P-values
@@ -344,17 +310,17 @@ Sim_CPAP_ARIMA <- Sim_CPAP %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-c('T', 'patient_id'))
 
-Sim_ESS_ARIMA <- Sim_ESS %>%
-  select(patient_id, T1:T90) %>%
+Sim_ESS_ARIMA <- sim_data_discrete(300, 5, 24) %>%
+  select(patient_id, T1:T5) %>%
   filter(patient_id == 10) %>%
-  pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'ESS_score') %>%
+  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'ESS_score') %>%
   mutate_at(vars(patient_id), as.factor) %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-c('T', 'patient_id'))
 
 ##ARIMA application
-ts_CPAP <- ts(Sim_CPAP_ARIMA$CPAP_adherence, frequency = 7)
-ts_ESS <- ts(Sim_ESS_ARIMA$ESS_score, frequency = 7)
+ts_CPAP <- ts(Sim_CPAP_ARIMA$CPAP_adherence)
+ts_ESS <- ts(Sim_ESS_ARIMA$ESS_score)
 
 #Describe time serie
 fUnitRoots::urkpssTest(ts_CPAP, type = c("tau"), lags = c("short"),
@@ -368,7 +334,7 @@ pacf(ts_CPAP) #partial autocorrelation = at lag k, correlation between all data
 
 #Automatic research for the best ARIMA model: auto.arima()
 ARIMA_CPAP <- auto.arima(ts_CPAP)
-summary(ARIMA_CPAP) #ARIMA(0, 0, 0)(1, 0, 1)
+summary(ARIMA_CPAP) #ARIMA(0, 1, 1)
 
 ARIMA_ESS <- auto.arima(ts_ESS)
 summary(ARIMA_ESS) #ARIMA(0, 0, 0)
@@ -383,7 +349,7 @@ Box.test(ARIMA_CPAP$residuals, type = 'Ljung-Box') #p>0.05 --> not significant
 ##CCF application
 #CCF between ESS and CPAP variables modified (detrend) by the ARIMA function
 ESS_res <- ARIMA_ESS$residuals
-CPAP_res <- ARIMA_CPAP$residuals
+CPAP_res <- ARIMA_CPAP$residuals[1:5]
 
 CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
 
@@ -391,15 +357,14 @@ CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
 acf(ts.intersect(CPAP_res, ESS_res))
 CCF_CPAP_ESS
 plot(CCF_CPAP_ESS)
-astsa::lag2.plot(CPAP_res, ESS_res, 10) #No correlation between ESS and CPAP with or without lag
+astsa::lag2.plot(CPAP_res, ESS_res, 5) #Weak correlation between ESS and CPAP with a lag of 1 and 2 time points 
 
 #Can add it to regressions: ESS according to CPAP adherence parameter (at different lags) 
 lag <- stats::lag
-final_data <- ts.intersect(ESS_res, CPAPlag11 = lag(CPAP_res, -11),
-                           CPAPlag1 = lag(CPAP_res, 1), 
-                           CPAPlag14 = lag(CPAP_res, 14))
+final_data <- ts.intersect(ESS_res, CPAPlag1 = lag(CPAP_res, 1),
+                           CPAPlag2 = lag(CPAP_res, 2))
 
-reg_CCF <- lm(ESS_res ~ CPAPlag11 + CPAPlag1 + CPAPlag14, data = final_data)
+reg_CCF <- lm(ESS_res ~ CPAPlag1 + CPAPlag2, data = final_data)
 summary(reg_CCF)
 astsa::acf2(residuals(reg_CCF))
 
@@ -439,9 +404,9 @@ Sim_CPAP_joint <- Sim_CPAP %>%
 #Data set for Cox and Joint model
 #ESS score: Drowsy patient = (ESS >= 10) = 0 /  Non-drowsy patient = (ESS < 10) = 1
 #Time = max between time when ESS score == 1 and T7 (the end of the study)
-Sim_ESS_joint <- Sim_ESS %>%
-  select(patient_id, T1:T7) %>%
-  pivot_longer(cols = c(T1:T7), names_to = 'Time', values_to = 'ESS_score') %>%
+Sim_ESS_joint <- sim_data_discrete(300, 5, 24) %>%
+  select(patient_id, T1:T5) %>%
+  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'ESS_score') %>%
   mutate_at(vars(patient_id), as.factor) %>%
   group_by(patient_id) %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
@@ -451,7 +416,7 @@ Sim_ESS_joint <- Sim_ESS %>%
   mutate_at(vars(ESS_score), ~ ifelse(.x >= 10, 0, 1)) %>%
   group_by(patient_id) %>%
   mutate_at(vars(Time), ~ ifelse(max(ESS_score) == 1, which.max(ESS_score), max(Time))) %>%
-  mutate_at(vars(ESS_score), ~ ifelse(Time == 7, 0, 1)) %>%
+  mutate_at(vars(ESS_score), ~ ifelse(Time == 5, 0, 1)) %>%
   distinct(patient_id, .keep_all = T) %>%
   left_join(Sex)
 
@@ -606,3 +571,42 @@ plot(dtw(Sim_CPAP_DTW[1:90], Sim_ESS_DTW[1:90], keep = T,
               step = rabinerJuangStepPattern(6,"c")),
      type = "twoway", offset = -2, ylab = 'CPAP adherence', xlab = 'Measuring points')
 
+
+#--------------------LCA method-------------------------------------------------
+library(poLCA)
+#LCA: how can we identify unmeasured clusters sharing common characteristics?
+#Categorical variables for CPAP adherence
+#All patients but only 5 time points were included
+
+#Data set/data preparation
+LCA_data <- Sim_CPAP_cat %>%
+  select(c(T1:T5, patient_id)) %>%
+  mutate_all(as.factor)
+
+LCA_function <- cbind(T1, T2, T3, T4, T5) ~ 1
+
+#LCA application
+#Choice of the number of clusters using BIC and AIC criterion
+set.seed(234)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 1728.8 / AIC = 1651.0
+
+set.seed(234)
+poLCA(LCA_function, LCA_data, nclass = 4) #BIC = 1832.6 / AIC = 1673.3
+
+set.seed(234)
+poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 1885.1 / AIC = 1685.1
+
+set.seed(234)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 1779.2 / AIC = 1660.7
+#number chosen = 3, bigger BIC difference between 3 and 4; 4 and 5 clusters and
+#smaller difference between 2 and 3 clusters / same results for AIC
+
+#Class membership probabilities
+LCA_test$P
+
+#Item-response probabilities
+LCA_test$probs
+
+#Example visualization of item-response probabilities
+#source: https://www.geeksforgeeks.org/latent-class-analysis-in-r/
+plot_lca(LCA_test)
