@@ -1,4 +1,4 @@
-# methodo_stat_donnees_long
+# methodo_stat_longitudinal_data
 
 
 ## Objectives
@@ -16,4 +16,4 @@ Ophélie Coiffier
 CC-BY-4.0
 
 ## Project status
-In progress - 01/27/2025
+In progress - 03/27/2025
