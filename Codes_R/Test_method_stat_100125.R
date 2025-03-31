@@ -47,9 +47,13 @@ ANOVA_df <- Sim_CPAP %>%
   pivot_longer(cols = T1:T90, names_to = 'time', values_to = 'Adherence') %>%
   mutate_at(vars(patient_id, time), as.factor)
 
+#Normal values assumption
+ggpubr::ggqqplot(ANOVA_df, 'Adherence', facet.by = 'time')
+
 #ANOVA test
-anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id, within = time)
-#p = 0.09 -> we can't say that the CPAP adherence is different at the different 
+get_anova_table(anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id,
+                           within = time))
+#p = 0.96 -> we can't say that the CPAP adherence is different at the different 
 #time point
 
 #--------------------chi² method-----------------------------------------------
@@ -201,7 +205,15 @@ adequacy(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
 plotrajeR(GBTM_test23)
 
 #Probability of belonging for each patient
-GroupProb(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
+Group_N <- GroupProb(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
+
+#Number of patient in each group
+Group_N <- Group_N %>%
+  mutate(patient_id = seq(1, 300, 1)) %>%
+  group_by(patient_id) %>%
+  mutate(mutate(group = which.max(c(Gr1, Gr2, Gr3))))
+
+questionr::freq(Group_N$group)
 
 #--------------------Mixed method-----------------------------------------------
 library(lme4)
@@ -232,7 +244,7 @@ Sim_CPAP_mixed <- Sim_CPAP_mixed %>%
 
 #Mixed model application
 #Random effect for the intercept, by patient id
-Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 | patient_id),
+Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
                    data = Sim_CPAP_mixed)
 summary(Mixed_test)
 
@@ -274,11 +286,11 @@ GMM_test4 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
                              mixture= ~ Time, nwg = T))
 summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
 
-#Better BIC = 3 clusters, distribution of patients ok
-summary(GMM_test3)
+#Better BIC = 4 clusters, distribution of patients ok
+summary(GMM_test4)
 
 #Posterior probabilities
-postprob(GMM_test3)
+postprob(GMM_test4)
 
 #Plot fixed effect in the longitudinal model
 #Create a table with names of the variables, coefficients, CI_inf, CI_sup, P-values
@@ -361,10 +373,9 @@ astsa::lag2.plot(CPAP_res, ESS_res, 5) #Weak correlation between ESS and CPAP wi
 
 #Can add it to regressions: ESS according to CPAP adherence parameter (at different lags) 
 lag <- stats::lag
-final_data <- ts.intersect(ESS_res, CPAPlag1 = lag(CPAP_res, 1),
-                           CPAPlag2 = lag(CPAP_res, 2))
+final_data <- ts.intersect(ESS_res, CPAPlag2 = lag(CPAP_res, 2))
 
-reg_CCF <- lm(ESS_res ~ CPAPlag1 + CPAPlag2, data = final_data)
+reg_CCF <- lm(ESS_res ~ CPAPlag2, data = final_data)
 summary(reg_CCF)
 astsa::acf2(residuals(reg_CCF))
 
@@ -392,8 +403,8 @@ Sex <- sample(x = c('M', 'F'), replace = T, size = 300) %>%
 
 #Data set for mixed model
 Sim_CPAP_joint <- Sim_CPAP %>%
-  select(patient_id, T1:T7) %>%
-  pivot_longer(cols = c(T1:T7), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+  select(patient_id, T1:T5) %>%
+  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'CPAP_adherence') %>%
   mutate_at(vars(patient_id), as.factor) %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-c('T')) %>%
@@ -540,6 +551,148 @@ ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
 
 questionr::freq(pred_states$state)
 
+#-------------------------RI-CLPM method----------------------------------------
+#source: https://rpubs.com/tpartridge/1204398
+#Ri-CLPM: 
+#2 continuous variables: CPAP adherence and ESS score
+#All patients but only 5 time points (2 time points too small so add 3 time
+#points to the ESS score data set)
+
+#Data set/data preparation
+Sim_ESS_RICLPM <- sim_data_discrete(300, 5, 24) %>%
+  rename(ESS1 = T1, ESS2 = T2, ESS3 = T3, ESS4 = T4, ESS5 = T5)
+
+data_RICLPM <- Sim_CPAP %>%
+  select(patient_id, T1, T15, T30, T55, T80) %>%
+  rename(CPAP1 = T1, CPAP2 = T15, CPAP3 = T30, CPAP4 = T55, CPAP5 = T80) %>%
+  left_join(Sim_ESS_RICLPM, by = 'patient_id')
+
+#RI-CLPM application
+#Function formula
+riclpm <- '
+
+# Define intercept factors
+
+i_CPAP =~ 1*CPAP1+1*CPAP2+1*CPAP3+1*CPAP4
+i_ESS =~ 1*ESS1+1*ESS2+1*ESS3+1*ESS4
+
+# Define single item latent variables
+
+eta_CPAP1 =~ 1*CPAP1
+eta_CPAP2 =~ 1*CPAP2 
+eta_CPAP3 =~ 1*CPAP3
+eta_CPAP4 =~ 1*CPAP4
+eta_ESS1 =~ 1*ESS1
+eta_ESS2 =~ 1*ESS2
+eta_ESS3 =~ 1*ESS3
+eta_ESS4 =~ 1*ESS4
+
+# Autoregressive effects
+eta_CPAP2 ~ a1*eta_CPAP1
+eta_CPAP3 ~ a1*eta_CPAP2
+eta_CPAP4 ~ a1*eta_CPAP3
+eta_ESS2 ~ a2*eta_ESS1
+eta_ESS3 ~ a2*eta_ESS2
+eta_ESS4 ~ a3*eta_ESS3
+
+# Crosslagged effects
+
+eta_ESS2 ~ c1*eta_CPAP1
+eta_ESS3 ~ c1*eta_CPAP2
+eta_ESS4 ~ c1*eta_CPAP3
+eta_CPAP2 ~ c2*eta_ESS1
+eta_CPAP3 ~ c2*eta_ESS2
+eta_CPAP4 ~ c2*eta_ESS3
+
+# Some further constraints on the variance structure
+
+# 1. Set error variances of the observed variables to zero
+
+CPAP1 ~~ 0*CPAP1
+CPAP2 ~~ 0*CPAP2
+CPAP3 ~~ 0*CPAP3
+CPAP4 ~~ 0*CPAP4
+ESS1 ~~ 0*ESS1
+ESS2 ~~ 0*ESS2
+ESS3 ~~ 0*ESS3
+ESS4 ~~ 0*ESS4
+
+# 2. Let lavaan estimate the variance of the latent variables
+eta_CPAP1 ~~ varCPAP1*eta_CPAP1
+eta_CPAP2 ~~ varCPAP2*eta_CPAP2
+eta_CPAP3 ~~ varCPAP3*eta_CPAP3
+eta_CPAP4 ~~ varCPAP4*eta_CPAP4
+eta_ESS1 ~~ varESS1*eta_ESS1
+eta_ESS2 ~~ varESS2*eta_ESS2
+eta_ESS3 ~~ varESS3*eta_ESS3
+eta_ESS4 ~~ varESS4*eta_ESS4
+
+# 3. We also want estimates of the intercept factor variances and an
+#    estimate of their covariance
+i_CPAP ~~ variCPAP*i_CPAP
+i_ESS ~~ variESS*i_ESS
+i_CPAP ~~ covi*i_ESS
+
+# 4. We have to define that the covariance between the intercepts and
+#    the latents of the first time point are zero
+
+eta_CPAP1 ~~ 0*i_CPAP
+eta_ESS1 ~~ 0*i_CPAP
+eta_CPAP1 ~~ 0*i_ESS
+eta_ESS1 ~~ 0*i_ESS
+
+# 5. Finally, we estimate the covariance between the latents of x and y
+#    of the first time point, the second time-point and so on. note that
+#    for the second to fourth time point the correlation is constrained to
+#    the same value
+
+eta_CPAP1 ~~ cov1*eta_ESS1
+eta_CPAP2 ~~ e1*eta_ESS2
+eta_CPAP3 ~~ e1*eta_ESS3
+eta_CPAP4 ~~ e1*eta_ESS4
+
+# The model also contains a mean structure and we have to define some
+# constraints for this part of the model. the assumption is that we
+# only want estimates of the mean of the intercept factors. all other means
+# are defined to be zero:
+CPAP1 ~ 0*1
+CPAP2 ~ 0*1
+CPAP3 ~ 0*1
+CPAP4 ~ 0*1
+ESS1 ~ 0*1
+ESS2 ~ 0*1
+ESS3 ~ 0*1
+ESS4 ~ 0*1
+eta_CPAP1 ~ 1
+eta_CPAP2 ~ 1
+eta_CPAP3 ~ 1
+eta_CPAP4 ~ 1
+eta_ESS1 ~ 1
+eta_ESS2 ~ 1
+eta_ESS3 ~ 1
+eta_ESS4 ~ 1
+i_CPAP ~ 1
+i_ESS ~ 1
+
+## define correlations
+cori := covi / (sqrt(variCPAP) * sqrt(variESS))
+cor1 := cov1 / (sqrt(varCPAP1) * sqrt(varESS1))
+cort2 := e1 / (sqrt(varCPAP2) * sqrt(varESS2))
+cort3 := e1 / (sqrt(varCPAP3) * sqrt(varESS3))
+cort4 := e1 / (sqrt(varCPAP4) * sqrt(varESS4))
+'
+
+#Fit the model
+riclpm_fit <- sem(riclpm, estimator = "MLR", data = data_RICLPM, mimic = "Mplus",
+                  missing = "FIML")
+
+#Results
+summary(riclpm_fit, fit.measures = TRUE, standardized = TRUE)
+
+#Figure
+semPaths(riclpm_fit, "std", layout = "tree2", edge.label.cex = 0.8, curvePivot = TRUE)
+
+
 #-------------------------DTW method--------------------------------------------
 #source: https://dtw.r-forge.r-project.org/
 library(dtw)
@@ -576,30 +729,28 @@ plot(dtw(Sim_CPAP_DTW[1:90], Sim_ESS_DTW[1:90], keep = T,
 library(poLCA)
 #LCA: how can we identify unmeasured clusters sharing common characteristics?
 #Categorical variables for CPAP adherence
-#All patients but only 5 time points were included
+#All patients and all time points were included
 
 #Data set/data preparation
 LCA_data <- Sim_CPAP_cat %>%
-  select(c(T1:T5, patient_id)) %>%
   mutate_all(as.factor)
 
-LCA_function <- cbind(T1, T2, T3, T4, T5) ~ 1
+LCA_function <- as.formula(paste0('cbind(', paste0('T', seq(1,90), collapse = ','), ') ~ 1'))
 
 #LCA application
 #Choice of the number of clusters using BIC and AIC criterion
-set.seed(234)
-LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 1728.8 / AIC = 1651.0
+set.seed(123)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 35930.7 / AIC = 24593.6
 
-set.seed(234)
-poLCA(LCA_function, LCA_data, nclass = 4) #BIC = 1832.6 / AIC = 1673.3
+set.seed(123)
+poLCA(LCA_function, LCA_data, nclass = 4) #BIC = 24516.6 / AIC = 21838.8
 
-set.seed(234)
-poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 1885.1 / AIC = 1685.1
+set.seed(123)
+poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 25320.5 / AIC = 21972.3
 
-set.seed(234)
-LCA_test <- poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 1779.2 / AIC = 1660.7
-#number chosen = 3, bigger BIC difference between 3 and 4; 4 and 5 clusters and
-#smaller difference between 2 and 3 clusters / same results for AIC
+set.seed(123)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 23544.7 / AIC = 21537.2
+#number chosen = 3, bigger BIC and AIC for other number of clusters
 
 #Class membership probabilities
 LCA_test$P
