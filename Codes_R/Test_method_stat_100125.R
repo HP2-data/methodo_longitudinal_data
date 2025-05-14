@@ -209,11 +209,70 @@ Group_N <- GroupProb(GBTM_test23, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:
 
 #Number of patient in each group
 Group_N <- Group_N %>%
+  as.data.frame() %>%
   mutate(patient_id = seq(1, 300, 1)) %>%
   group_by(patient_id) %>%
-  mutate(mutate(group = which.max(c(Gr1, Gr2, Gr3))))
+  mutate(group = which.max(c(Gr1, Gr2, Gr3)))
 
 questionr::freq(Group_N$group)
+
+#--------------------GMM method-------------------------------------------------
+#source: file:///C:/Users/HP2/Downloads/GMM%20in%20R_Dec2022_v2.pdf
+library(lcmm)
+#GMM: how can we describe trajectories of longitudinal data with repeated measurement
+#of follow-up?
+#Continuous data for CPAP adherence
+#All patients but only 5 time points were included (long runtimes with many time points)
+
+#Data set/data preparation
+#Data in long format
+Sim_CPAP_GMM <- Sim_CPAP %>%
+  select(patient_id, T1:T5) %>%
+  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'CPAP_adherence')
+
+#GMM application
+#Random effect for the intercept and slope
+#test: 1, 2, 3, 4 clusters
+set.seed(123)
+GMM_test1 <- hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                  random = ~ 1 + Time, ng = 1, data = Sim_CPAP_GMM)
+GMM_test2 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
+                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                             random = ~ 1 + Time, ng = 2, data = Sim_CPAP_GMM,
+                             mixture= ~ Time, nwg = T))
+GMM_test3 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
+                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                             random = ~ 1 + Time, ng = 3, data = Sim_CPAP_GMM,
+                             mixture= ~ Time, nwg = T))
+GMM_test4 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
+                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                             random = ~ 1 + Time, ng = 4, data = Sim_CPAP_GMM,
+                             mixture= ~ Time, nwg = T))
+summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
+
+#Better BIC = 4 clusters, distribution of patients ok
+summary(GMM_test4)
+
+#Posterior probabilities
+postprob(GMM_test4)
+
+#Plot fixed effect in the longitudinal model
+#Create a table with names of the variables, coefficients, CI_inf, CI_sup, P-values
+#and cluster: "GMM_fixed"
+ggplot(GMM_fixed, aes(colour = Cluster, y = beta, x = variable)) +
+  geom_pointrange(aes(y = beta, ymin = IC_inf, ymax = IC_sup),
+                  position = position_dodge(width = 0.25)) +
+  ylab('h/night') +
+  xlab('Time points') +
+  theme_classic() +
+  scale_color_manual(values = c('#C2D9ED', '#A4CCE3', '#539DCC', '#08306B')) +
+  annotate('text', x = 1.07, y = -0.25, color = '#539DCC', label = '*') +
+  annotate('text', x = 1.15, y = 0.47, color = '#08306B', label = '*') +
+  annotate('text', x = 2.15, y = 0.52, color = '#08306B', label = '*') +
+  annotate('text', x = 3.02, y = -0.64, color = '#A4CCE3', label = '*') +
+  annotate('text', x = 3.15, y = 1.13, color = '#08306B', label = '*') +
+  annotate('text', x = 4.02, y = -0.77, color = '#A4CCE3', label = '*') +
+  annotate('text', x = 4.15, y = 1.13, color = '#08306B', label = '*')
 
 #--------------------Mixed method-----------------------------------------------
 library(lme4)
@@ -252,56 +311,51 @@ summary(Mixed_test)
 sjPlot::plot_model(Mixed_test)
 sjPlot::tab_model(Mixed_test)
 
-#--------------------GMM method-------------------------------------------------
-#source: file:///C:/Users/HP2/Downloads/GMM%20in%20R_Dec2022_v2.pdf
-library(lcmm)
-#GMM: how can we describe trajectories of longitudinal data with repeated measurement
-#of follow-up?
-#Continuous data for CPAP adherence
-#All patients but only 5 time points were included (long runtimes with many time points)
+#-------------------------Survival method------------------------------------------
+library(survival) #For Surv() functions; fit survival models
+library(survminer) #For ggsurvplot() function; plot the survival models
+#survival: how can we determine the survival probability or cumulative risk of a
+#population over a defined period of time.
+#Continuous CPAP adherence and categorical ESS scores for Cox model
+#All patients and all time points were included
 
-#Data set/data preparation
-#Data in long format
-Sim_CPAP_GMM <- Sim_CPAP %>%
-  select(patient_id, T1:T5) %>%
-  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'CPAP_adherence')
+#Data set for survival model
+#The dead of the patient is the moment when its CPAP adherence is >= 4h
+#Time = max between time when CPAP adherence == 1 and T90 (the end of the study)
+#So the status is dead (CPAP_adherence = 1) when CPAP adherence >= 4h before the end of the study or 
+#censored (CPAp_adherence = 0) when CPAP adherence < 4h over the study
+Sim_CPAP_survival <- Sim_CPAP %>%
+  pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+  mutate_at(vars(patient_id), as.factor) %>%
+  mutate_at(vars(Time), ~as.numeric(as.factor(.x))) %>%
+  mutate_at(vars(CPAP_adherence), ~ifelse(.x >= 4, 1, 0)) %>%
+  group_by(patient_id) %>%
+  summarise(Time = ifelse(max(CPAP_adherence) == 1, which.max(CPAP_adherence), max(Time)),
+            CPAP_adherence = ifelse(Time == 90, 0, CPAP_adherence)) 
 
-#GMM application
-#Random effect for the intercept and slope
-#test: 1, 2, 3, 4 clusters
-set.seed(123)
-GMM_test1 <- hlme(CPAP_adherence ~ Time, subject = 'patient_id',
-                  random = ~ 1 + Time, ng = 1, data = Sim_CPAP_GMM)
-GMM_test2 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
-                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
-                                   random = ~ 1 + Time, ng = 2, data = Sim_CPAP_GMM,
-                                   mixture= ~ Time, nwg = T))
-GMM_test3 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
-                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
-                             random = ~ 1 + Time, ng = 3, data = Sim_CPAP_GMM,
-                             mixture= ~ Time, nwg = T))
-GMM_test4 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
-                        hlme(CPAP_adherence ~ Time, subject = 'patient_id',
-                             random = ~ 1 + Time, ng = 4, data = Sim_CPAP_GMM,
-                             mixture= ~ Time, nwg = T))
-summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
+#Survival model
+fit <- survfit(Surv(Time, CPAP_adherence) ~ 1, data = Sim_CPAP_survival)
+#Plot results
+ggsurvplot(fit, risk.table = T)
 
-#Better BIC = 4 clusters, distribution of patients ok
-summary(GMM_test4)
+#Data set for survival plot according to drowsy status
+#ESS score: Drowsy patient = (ESS >= 10) = 0 /  Non-drowsy patient = (ESS < 10) = 1
+#Time = max between time when ESS score == 1 and T7 (the end of the study)
+Sim_ESS_joint <- Sim_ESS_cat %>%
+  select(patient_id, T1) %>%
+  rename(Drowsy = T1) %>%
+  mutate_at(vars(patient_id), as.factor) 
 
-#Posterior probabilities
-postprob(GMM_test4)
+Sim_CPAP_survival <- Sim_CPAP_survival %>%
+  left_join(Sim_ESS_joint)
 
-#Plot fixed effect in the longitudinal model
-#Create a table with names of the variables, coefficients, CI_inf, CI_sup, P-values
-#and cluster: "GMM_fixed"
-ggplot(GMM_fixed, aes(colour = Cluster, y = beta, x = variable)) +
-  geom_pointrange(aes(y = beta, ymin = IC_inf, ymax = IC_sup, shape = `P-value`),
-                  position = position_dodge(width = 0.25)) +
-  ylab('') +
-  xlab('') +
-  ggtitle('Fixed effect in the longitudinal model') +
-  theme_classic()
+#Survival model
+fit <- survfit(Surv(Time, CPAP_adherence) ~ Drowsy, data = Sim_CPAP_survival)
+#Plot results
+ggsurvplot(fit, risk.table = T)
+
+#Comparison test
+survdiff(Surv(Time, CPAP_adherence) ~ ESS_score, data = Sim_CPAP_survival) #p>0.05 => no difference
 
 #--------------------ARIMA & CCF method-----------------------------------------
 #source for CCF method: https://online.stat.psu.edu/stat510/lesson/8/8.2
@@ -322,10 +376,10 @@ Sim_CPAP_ARIMA <- Sim_CPAP %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-c('T', 'patient_id'))
 
-Sim_ESS_ARIMA <- sim_data_discrete(300, 5, 24) %>%
-  select(patient_id, T1:T5) %>%
+Sim_ESS_ARIMA <- sim_data_discrete(300, 90, 24) %>%
+  select(patient_id, T1:T90) %>%
   filter(patient_id == 10) %>%
-  pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'ESS_score') %>%
+  pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'ESS_score') %>%
   mutate_at(vars(patient_id), as.factor) %>%
   separate(Time, sep = 1, into = c('T', 'Time')) %>%
   select(-c('T', 'patient_id'))
@@ -361,7 +415,7 @@ Box.test(ARIMA_CPAP$residuals, type = 'Ljung-Box') #p>0.05 --> not significant
 ##CCF application
 #CCF between ESS and CPAP variables modified (detrend) by the ARIMA function
 ESS_res <- ARIMA_ESS$residuals
-CPAP_res <- ARIMA_CPAP$residuals[1:5]
+CPAP_res <- ARIMA_CPAP$residuals
 
 CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
 
@@ -369,17 +423,311 @@ CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
 acf(ts.intersect(CPAP_res, ESS_res))
 CCF_CPAP_ESS
 plot(CCF_CPAP_ESS)
-astsa::lag2.plot(CPAP_res, ESS_res, 5) #Weak correlation between ESS and CPAP with a lag of 1 and 2 time points 
+astsa::lag2.plot(CPAP_res, ESS_res, 15) #Weak correlation between ESS and CPAP  
 
 #Can add it to regressions: ESS according to CPAP adherence parameter (at different lags) 
 lag <- stats::lag
-final_data <- ts.intersect(ESS_res, CPAPlag2 = lag(CPAP_res, 2))
+final_data <- ts.intersect(ESS_res, CPAPlag14 = lag(CPAP_res, 14))
 
-reg_CCF <- lm(ESS_res ~ CPAPlag2, data = final_data)
+reg_CCF <- lm(ESS_res ~ CPAPlag14, data = final_data)
 summary(reg_CCF)
 astsa::acf2(residuals(reg_CCF))
 
 #Can add covariates to the ARIMA method --> ARIMAX
+
+#-------------------------Hidden Markov method------------------------------------------
+#source: https://www.geeksforgeeks.org/hidden-markov-model-in-r/
+library(depmixS4)
+#Hidden Markov: how can we assess changes in individual characteristics when these
+#are not directly observable?
+#1 known categorical variable: CPAP adherence with 3 states
+#The last 200 patients and all time points were included
+
+#Data set/data preparation
+Sim_CPAP_HMM <- Sim_CPAP_cat %>%
+  filter(patient_id %in% seq(100, 300)) %>%
+  mutate_at(vars('T1':'T90'), ~ as.numeric(as.factor(.x))) %>%
+  pivot_longer(cols = c('T1':'T90'), names_to = 'Time', values_to = 'CPAP_adherence')
+  
+#To take into account patient_id: the lengths of individual, i.e. independent, time series.
+#If not specified, the responses are assumed to from a single time series.
+ntimes <- Sim_CPAP_HMM %>%
+  group_by(patient_id) %>%
+  summarise(N = length(CPAP_adherence))
+
+Sim_CPAP_HMM <- Sim_CPAP_HMM %>%
+  arrange(patient_id) #To coincide with the ntimes table
+
+#Hidden Markov application
+#Number of hidden states: 2 -> Adherent and Non adherent; and EM algo
+#multinomial() for categorical observations
+#variable ~ 1 for independence of observation variable from all covariates 
+HMM_test <- depmix(response = CPAP_adherence ~ 1, family = multinomial(), nstates = 2,
+                   data = Sim_CPAP_HMM, ntimes = ntimes$N)
+
+set.seed(123)
+HMM_final <- fit(HMM_test)
+
+#Test the model
+BIC(HMM_final)
+AIC(HMM_final)
+logLik(HMM_final)
+
+#Initial state probability
+init_prob <- matrix(getpars(HMM_final)[1:2], nrow = 1, byrow = T)
+colnames(init_prob) <- c('Non adherent', 'Adherent')
+init_prob
+
+#Transition matrix
+trans_prob <- matrix(getpars(HMM_final)[3:6], nrow = 2, byrow = T)
+colnames(trans_prob) <- c('Non adherent', 'Adherent')
+rownames(trans_prob) <- c('Non adherent', 'Adherent')
+trans_prob
+
+#Predict the hidden states up to 100 time points
+pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
+pred_states
+
+ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
+  geom_line() +
+  ylab('State prediction') +
+  xlab('Time points') +
+  theme_classic() + 
+  scale_y_discrete(breaks = c(1, 2), limits = factor(c(1, 2)))
+
+questionr::freq(pred_states$state)
+
+#-------------------------RI-CLPM method----------------------------------------
+#source: https://rpubs.com/tpartridge/1204398
+library(lavaan)
+library(semPlot) #For the figure
+
+#Ri-CLPM: how can we ass reciprocal causal effects or mediation effects taking
+#into account time-invariant and trait-like stability?
+#2 continuous variables: CPAP adherence and ESS score
+#All patients but only 5 time points (2 time points too small so add 3 time
+#points to the ESS score data set)
+
+#Data set/data preparation
+Sim_ESS_RICLPM <- sim_data_discrete(300, 5, 24) %>%
+  rename(ESS1 = T1, ESS2 = T2, ESS3 = T3, ESS4 = T4, ESS5 = T5)
+
+data_RICLPM <- Sim_CPAP %>%
+  select(patient_id, T1, T15, T30, T55, T80) %>%
+  rename(CPAP1 = T1, CPAP2 = T15, CPAP3 = T30, CPAP4 = T55, CPAP5 = T80) %>%
+  left_join(Sim_ESS_RICLPM, by = 'patient_id')
+
+#RI-CLPM application
+#Function formula
+riclpm <- '
+
+# Define intercept factors
+
+i_CPAP =~ 1*CPAP1+1*CPAP2+1*CPAP3+1*CPAP4+1*CPAP5
+i_ESS =~ 1*ESS1+1*ESS2+1*ESS3+1*ESS4+1*ESS5
+
+# Define single item latent variables
+
+eta_CPAP1 =~ 1*CPAP1
+eta_CPAP2 =~ 1*CPAP2 
+eta_CPAP3 =~ 1*CPAP3
+eta_CPAP4 =~ 1*CPAP4
+eta_CPAP5 =~ 1*CPAP5
+eta_ESS1 =~ 1*ESS1
+eta_ESS2 =~ 1*ESS2
+eta_ESS3 =~ 1*ESS3
+eta_ESS4 =~ 1*ESS4
+eta_ESS5 =~ 1*ESS5
+
+# Autoregressive effects
+eta_CPAP2 ~ a1*eta_CPAP1
+eta_CPAP3 ~ a1*eta_CPAP2
+eta_CPAP4 ~ a1*eta_CPAP3
+eta_CPAP5 ~ a1*eta_CPAP4
+eta_ESS2 ~ a2*eta_ESS1
+eta_ESS3 ~ a2*eta_ESS2
+eta_ESS4 ~ a3*eta_ESS3
+eta_ESS5 ~ a3*eta_ESS4
+
+# Crosslagged effects
+
+eta_ESS2 ~ c1*eta_CPAP1
+eta_ESS3 ~ c1*eta_CPAP2
+eta_ESS4 ~ c1*eta_CPAP3
+eta_ESS5 ~ c1*eta_CPAP4
+eta_CPAP2 ~ c2*eta_ESS1
+eta_CPAP3 ~ c2*eta_ESS2
+eta_CPAP4 ~ c2*eta_ESS3
+eta_CPAP5 ~ c2*eta_ESS4
+
+# Some further constraints on the variance structure
+
+# 1. Set error variances of the observed variables to zero
+
+CPAP1 ~~ 0*CPAP1
+CPAP2 ~~ 0*CPAP2
+CPAP3 ~~ 0*CPAP3
+CPAP4 ~~ 0*CPAP4
+CPAP5 ~~ 0*CPAP5
+ESS1 ~~ 0*ESS1
+ESS2 ~~ 0*ESS2
+ESS3 ~~ 0*ESS3
+ESS4 ~~ 0*ESS4
+ESS4 ~~ 0*ESS5
+
+# 2. Let lavaan estimate the variance of the latent variables
+eta_CPAP1 ~~ varCPAP1*eta_CPAP1
+eta_CPAP2 ~~ varCPAP2*eta_CPAP2
+eta_CPAP3 ~~ varCPAP3*eta_CPAP3
+eta_CPAP4 ~~ varCPAP4*eta_CPAP4
+eta_CPAP5 ~~ varCPAP5*eta_CPAP5
+eta_ESS1 ~~ varESS1*eta_ESS1
+eta_ESS2 ~~ varESS2*eta_ESS2
+eta_ESS3 ~~ varESS3*eta_ESS3
+eta_ESS4 ~~ varESS4*eta_ESS4
+eta_ESS5 ~~ varESS5*eta_ESS5
+
+# 3. We also want estimates of the intercept factor variances and an
+#    estimate of their covariance
+i_CPAP ~~ variCPAP*i_CPAP
+i_ESS ~~ variESS*i_ESS
+i_CPAP ~~ covi*i_ESS
+
+# 4. We have to define that the covariance between the intercepts and
+#    the latents of the first time point are zero
+
+eta_CPAP1 ~~ 0*i_CPAP
+eta_ESS1 ~~ 0*i_CPAP
+eta_CPAP1 ~~ 0*i_ESS
+eta_ESS1 ~~ 0*i_ESS
+
+# 5. Finally, we estimate the covariance between the latents of x and y
+#    of the first time point, the second time-point and so on. Note that
+#    for the second to fourth time point the correlation is constrained to
+#    the same value
+
+eta_CPAP1 ~~ cov1*eta_ESS1
+eta_CPAP2 ~~ e1*eta_ESS2
+eta_CPAP3 ~~ e1*eta_ESS3
+eta_CPAP4 ~~ e1*eta_ESS4
+eta_CPAP5 ~~ e1*eta_ESS5
+
+# The model also contains a mean structure and we have to define some
+# constraints for this part of the model. The assumption is that we
+# only want estimates of the mean of the intercept factors. All other means
+# are defined to be zero:
+CPAP1 ~ 0*1
+CPAP2 ~ 0*1
+CPAP3 ~ 0*1
+CPAP4 ~ 0*1
+CPAP5 ~ 0*1
+ESS1 ~ 0*1
+ESS2 ~ 0*1
+ESS3 ~ 0*1
+ESS4 ~ 0*1
+ESS5 ~ 0*1
+eta_CPAP1 ~ 1
+eta_CPAP2 ~ 1
+eta_CPAP3 ~ 1
+eta_CPAP4 ~ 1
+eta_CPAP5 ~1
+eta_ESS1 ~ 1
+eta_ESS2 ~ 1
+eta_ESS3 ~ 1
+eta_ESS4 ~ 1
+eta_ESS5 ~ 1
+i_CPAP ~ 1
+i_ESS ~ 1
+
+## Define correlations
+cori := covi / (sqrt(variCPAP) * sqrt(variESS))
+cor1 := cov1 / (sqrt(varCPAP1) * sqrt(varESS1))
+cort2 := e1 / (sqrt(varCPAP2) * sqrt(varESS2))
+cort3 := e1 / (sqrt(varCPAP3) * sqrt(varESS3))
+cort4 := e1 / (sqrt(varCPAP4) * sqrt(varESS4))
+cort5 := e1 / (sqrt(varCPAP5) * sqrt(varESS5))
+'
+
+#Fit the model
+riclpm_fit <- sem(riclpm, estimator = "MLR", data = data_RICLPM, mimic = "Mplus",
+                  missing = "FIML")
+
+#Results
+summary(riclpm_fit, fit.measures = TRUE, standardized = TRUE)
+
+#Figure
+semPaths(riclpm_fit, "std", layout = "tree2", edge.label.cex = 0.8, curvePivot = TRUE)
+
+
+#-------------------------DTW method--------------------------------------------
+#source: https://dtw.r-forge.r-project.org/
+library(dtw)
+#DTW: how can we look at the similarity between 2 time series?
+#2 numerical variables for our example but it is possible to use numerical template
+#and categorical query. Not possible with categorical template! Continuous CPAP
+#adherence and discrete ESS scores
+#All time points but only 1 individual were included
+
+#Data set/data preparation
+Sim_CPAP_DTW <- Sim_CPAP %>%
+  filter(patient_id == 25) %>%
+  as.numeric()
+
+Sim_ESS_DTW <- Sim_ESS %>%
+  filter(patient_id == 25) %>%
+  as.numeric()
+
+#DTW application
+#Find the best match with the canonical recursion formula
+align <- dtw(Sim_CPAP_DTW, Sim_ESS_DTW, keep = T)
+
+#Alignment curve
+plot(align, type = 'threeway', xlab = 'CPAP adherence over time',
+     ylab = 'ESS score over time / reference index')
+
+#Align and plot for the 90 measuring points
+plot(dtw(Sim_CPAP_DTW[1:90], Sim_ESS_DTW[1:90], keep = T,
+              step = rabinerJuangStepPattern(6,"c")),
+     type = "twoway", offset = -2, ylab = 'CPAP adherence', xlab = 'Measuring points')
+
+
+#--------------------LCA method-------------------------------------------------
+library(poLCA)
+#LCA: how can we identify unmeasured clusters sharing common characteristics?
+#Categorical variables for CPAP adherence
+#All patients and all time points were included
+
+#Data set/data preparation
+LCA_data <- Sim_CPAP_cat %>%
+  mutate_all(as.factor)
+
+LCA_function <- as.formula(paste0('cbind(', paste0('T', seq(1,90), collapse = ','), ') ~ 1'))
+
+#LCA application
+#Choice of the number of clusters using BIC and AIC criterion
+set.seed(123)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 35930.7 / AIC = 24593.6
+
+set.seed(123)
+poLCA(LCA_function, LCA_data, nclass = 4) #BIC = 24516.6 / AIC = 21838.8
+
+set.seed(123)
+poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 25320.5 / AIC = 21972.3
+
+set.seed(123)
+LCA_test <- poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 23544.7 / AIC = 21537.2
+#number chosen = 3, bigger BIC and AIC for other number of clusters
+
+#Class membership probabilities
+LCA_test$P
+
+#Item-response probabilities
+LCA_test$probs
+
+#Example visualization of item-response probabilities
+#source: https://www.geeksforgeeks.org/latent-class-analysis-in-r/
+plot_lca(LCA_test)
+
 
 #-------------------------Joint method------------------------------------------
 library(nlme) #For lme() function; fit the mixed model
@@ -495,269 +843,3 @@ predSurv <- predict(fit_jm, newdata = New_df, process ="event", return_newdata =
 plot(predSurv)
 #Final plot with both models
 plot(predLong1, predSurv)
-
-#-------------------------Hidden Markov method------------------------------------------
-#source: https://www.geeksforgeeks.org/hidden-markov-model-in-r/
-library(depmixS4)
-#Hidden Markov: how can we assess changes in individual characteristics when these
-#are not directly observable?
-#1 known categorical variable: CPAP adherence with 3 states
-#Only 1 patient but all time points were included
-
-#Data set/data preparation
-Sim_CPAP_HMM <- Sim_CPAP_cat %>%
-  filter(patient_id == 25) %>%
-  select(-'patient_id') %>%
-  t() %>%
-  as.factor() %>%
-  as.numeric()
-
-#Hidden Markov application
-#Number of hidden states: 2 -> Adherent and Non adherent; and EM algo
-#multinomial() for categorical observations
-#variable ~ 1 for independence of observation variable from all covariates 
-HMM_test <- depmix(Sim_CPAP_HMM ~ 1, family = multinomial(), nstates = 2,
-                   data = data.frame(Sim_CPAP_HMM))
-
-set.seed(123)
-HMM_final <- fit(HMM_test)
-
-#Test the model
-BIC(HMM_final)
-AIC(HMM_final)
-logLik(HMM_final)
-
-#Initial state probability
-init_prob <- matrix(getpars(HMM_final)[1:2], nrow = 1, byrow = T)
-colnames(init_prob) <- c('Non adherent', 'Adherent')
-init_prob
-
-#Transition matrix
-trans_prob <- matrix(getpars(HMM_final)[3:6], nrow = 2, byrow = T)
-colnames(trans_prob) <- c('Non adherent', 'Adherent')
-rownames(trans_prob) <- c('Non adherent', 'Adherent')
-trans_prob
-
-#Predict the hidden states
-pred_states <- posterior(HMM_final, type = 'viterbi')
-pred_states
-
-ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
-  geom_line() +
-  ylab('State prediction') +
-  xlab('Time points') +
-  theme_classic() + 
-  scale_y_discrete(breaks = c(1, 2), limits = factor(c(1, 2)))
-
-questionr::freq(pred_states$state)
-
-#-------------------------RI-CLPM method----------------------------------------
-#source: https://rpubs.com/tpartridge/1204398
-#Ri-CLPM: 
-#2 continuous variables: CPAP adherence and ESS score
-#All patients but only 5 time points (2 time points too small so add 3 time
-#points to the ESS score data set)
-
-#Data set/data preparation
-Sim_ESS_RICLPM <- sim_data_discrete(300, 5, 24) %>%
-  rename(ESS1 = T1, ESS2 = T2, ESS3 = T3, ESS4 = T4, ESS5 = T5)
-
-data_RICLPM <- Sim_CPAP %>%
-  select(patient_id, T1, T15, T30, T55, T80) %>%
-  rename(CPAP1 = T1, CPAP2 = T15, CPAP3 = T30, CPAP4 = T55, CPAP5 = T80) %>%
-  left_join(Sim_ESS_RICLPM, by = 'patient_id')
-
-#RI-CLPM application
-#Function formula
-riclpm <- '
-
-# Define intercept factors
-
-i_CPAP =~ 1*CPAP1+1*CPAP2+1*CPAP3+1*CPAP4
-i_ESS =~ 1*ESS1+1*ESS2+1*ESS3+1*ESS4
-
-# Define single item latent variables
-
-eta_CPAP1 =~ 1*CPAP1
-eta_CPAP2 =~ 1*CPAP2 
-eta_CPAP3 =~ 1*CPAP3
-eta_CPAP4 =~ 1*CPAP4
-eta_ESS1 =~ 1*ESS1
-eta_ESS2 =~ 1*ESS2
-eta_ESS3 =~ 1*ESS3
-eta_ESS4 =~ 1*ESS4
-
-# Autoregressive effects
-eta_CPAP2 ~ a1*eta_CPAP1
-eta_CPAP3 ~ a1*eta_CPAP2
-eta_CPAP4 ~ a1*eta_CPAP3
-eta_ESS2 ~ a2*eta_ESS1
-eta_ESS3 ~ a2*eta_ESS2
-eta_ESS4 ~ a3*eta_ESS3
-
-# Crosslagged effects
-
-eta_ESS2 ~ c1*eta_CPAP1
-eta_ESS3 ~ c1*eta_CPAP2
-eta_ESS4 ~ c1*eta_CPAP3
-eta_CPAP2 ~ c2*eta_ESS1
-eta_CPAP3 ~ c2*eta_ESS2
-eta_CPAP4 ~ c2*eta_ESS3
-
-# Some further constraints on the variance structure
-
-# 1. Set error variances of the observed variables to zero
-
-CPAP1 ~~ 0*CPAP1
-CPAP2 ~~ 0*CPAP2
-CPAP3 ~~ 0*CPAP3
-CPAP4 ~~ 0*CPAP4
-ESS1 ~~ 0*ESS1
-ESS2 ~~ 0*ESS2
-ESS3 ~~ 0*ESS3
-ESS4 ~~ 0*ESS4
-
-# 2. Let lavaan estimate the variance of the latent variables
-eta_CPAP1 ~~ varCPAP1*eta_CPAP1
-eta_CPAP2 ~~ varCPAP2*eta_CPAP2
-eta_CPAP3 ~~ varCPAP3*eta_CPAP3
-eta_CPAP4 ~~ varCPAP4*eta_CPAP4
-eta_ESS1 ~~ varESS1*eta_ESS1
-eta_ESS2 ~~ varESS2*eta_ESS2
-eta_ESS3 ~~ varESS3*eta_ESS3
-eta_ESS4 ~~ varESS4*eta_ESS4
-
-# 3. We also want estimates of the intercept factor variances and an
-#    estimate of their covariance
-i_CPAP ~~ variCPAP*i_CPAP
-i_ESS ~~ variESS*i_ESS
-i_CPAP ~~ covi*i_ESS
-
-# 4. We have to define that the covariance between the intercepts and
-#    the latents of the first time point are zero
-
-eta_CPAP1 ~~ 0*i_CPAP
-eta_ESS1 ~~ 0*i_CPAP
-eta_CPAP1 ~~ 0*i_ESS
-eta_ESS1 ~~ 0*i_ESS
-
-# 5. Finally, we estimate the covariance between the latents of x and y
-#    of the first time point, the second time-point and so on. note that
-#    for the second to fourth time point the correlation is constrained to
-#    the same value
-
-eta_CPAP1 ~~ cov1*eta_ESS1
-eta_CPAP2 ~~ e1*eta_ESS2
-eta_CPAP3 ~~ e1*eta_ESS3
-eta_CPAP4 ~~ e1*eta_ESS4
-
-# The model also contains a mean structure and we have to define some
-# constraints for this part of the model. the assumption is that we
-# only want estimates of the mean of the intercept factors. all other means
-# are defined to be zero:
-CPAP1 ~ 0*1
-CPAP2 ~ 0*1
-CPAP3 ~ 0*1
-CPAP4 ~ 0*1
-ESS1 ~ 0*1
-ESS2 ~ 0*1
-ESS3 ~ 0*1
-ESS4 ~ 0*1
-eta_CPAP1 ~ 1
-eta_CPAP2 ~ 1
-eta_CPAP3 ~ 1
-eta_CPAP4 ~ 1
-eta_ESS1 ~ 1
-eta_ESS2 ~ 1
-eta_ESS3 ~ 1
-eta_ESS4 ~ 1
-i_CPAP ~ 1
-i_ESS ~ 1
-
-## define correlations
-cori := covi / (sqrt(variCPAP) * sqrt(variESS))
-cor1 := cov1 / (sqrt(varCPAP1) * sqrt(varESS1))
-cort2 := e1 / (sqrt(varCPAP2) * sqrt(varESS2))
-cort3 := e1 / (sqrt(varCPAP3) * sqrt(varESS3))
-cort4 := e1 / (sqrt(varCPAP4) * sqrt(varESS4))
-'
-
-#Fit the model
-riclpm_fit <- sem(riclpm, estimator = "MLR", data = data_RICLPM, mimic = "Mplus",
-                  missing = "FIML")
-
-#Results
-summary(riclpm_fit, fit.measures = TRUE, standardized = TRUE)
-
-#Figure
-semPaths(riclpm_fit, "std", layout = "tree2", edge.label.cex = 0.8, curvePivot = TRUE)
-
-
-#-------------------------DTW method--------------------------------------------
-#source: https://dtw.r-forge.r-project.org/
-library(dtw)
-#DTW: how can we look at the similarity between 2 time series?
-#2 numerical variables for our example but it is possible to use numerical template
-#and categorical query. Not possible with categorical template! Continuous CPAP
-#adherence and discrete ESS scores
-#All time points but only 1 individual were included
-
-#Data set/data preparation
-Sim_CPAP_DTW <- Sim_CPAP %>%
-  filter(patient_id == 25) %>%
-  as.numeric()
-
-Sim_ESS_DTW <- Sim_ESS %>%
-  filter(patient_id == 25) %>%
-  as.numeric()
-
-#DTW application
-#Find the best match with the canonical recursion formula
-align <- dtw(Sim_CPAP_DTW, Sim_ESS_DTW, keep = T)
-
-#Alignment curve
-plot(align, type = 'threeway', xlab = 'CPAP adherence over time',
-     ylab = 'ESS score over time / reference index')
-
-#Align and plot for the 90 measuring points
-plot(dtw(Sim_CPAP_DTW[1:90], Sim_ESS_DTW[1:90], keep = T,
-              step = rabinerJuangStepPattern(6,"c")),
-     type = "twoway", offset = -2, ylab = 'CPAP adherence', xlab = 'Measuring points')
-
-
-#--------------------LCA method-------------------------------------------------
-library(poLCA)
-#LCA: how can we identify unmeasured clusters sharing common characteristics?
-#Categorical variables for CPAP adherence
-#All patients and all time points were included
-
-#Data set/data preparation
-LCA_data <- Sim_CPAP_cat %>%
-  mutate_all(as.factor)
-
-LCA_function <- as.formula(paste0('cbind(', paste0('T', seq(1,90), collapse = ','), ') ~ 1'))
-
-#LCA application
-#Choice of the number of clusters using BIC and AIC criterion
-set.seed(123)
-LCA_test <- poLCA(LCA_function, LCA_data, nclass = 2) #BIC = 35930.7 / AIC = 24593.6
-
-set.seed(123)
-poLCA(LCA_function, LCA_data, nclass = 4) #BIC = 24516.6 / AIC = 21838.8
-
-set.seed(123)
-poLCA(LCA_function, LCA_data, nclass = 5) #BIC = 25320.5 / AIC = 21972.3
-
-set.seed(123)
-LCA_test <- poLCA(LCA_function, LCA_data, nclass = 3) #BIC = 23544.7 / AIC = 21537.2
-#number chosen = 3, bigger BIC and AIC for other number of clusters
-
-#Class membership probabilities
-LCA_test$P
-
-#Item-response probabilities
-LCA_test$probs
-
-#Example visualization of item-response probabilities
-#source: https://www.geeksforgeeks.org/latent-class-analysis-in-r/
-plot_lca(LCA_test)
