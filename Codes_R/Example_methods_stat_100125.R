@@ -38,7 +38,8 @@ Sim_ESS_cat <- Sim_ESS %>%
 
 #--------------------ANOVA method-----------------------------------------------
 library(rstatix)
-#ANOVA analysis: does a continuous variable differ over time?
+#ANOVA analysis: how can we study the probability of transition from one cluster to
+#another between 2 consecutive points in time?
 #Continuous variable: CPAP adherence
 #All time points and all patients were included
 
@@ -57,7 +58,8 @@ get_anova_table(anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id,
 #time point
 
 #--------------------chi² method-----------------------------------------------
-#chi² Mantel-Haenszel: does a categorical variable differ over time?
+#chi² Mantel-Haenszel: how can we study the probability of transition from one
+#cluster to another between 2 consecutive points in time?
 #2 nominal variables are conditionally independent in each stratum assuming that
 #there is no 3-way interaction
 #Selection of 2 time points (ESS score measured at 2 time points only) and
@@ -111,8 +113,8 @@ choice(clus_KML)
 #--------------------LTA method-------------------------------------------------
 #source: https://github.com/cran/LMest/blob/master/R/lmest.R
 library(LMest)
-#LTA: how can we study the probability of transition from 1 cluster to another
-#between 2 consecutive points in time?
+#LTA: how can we compare the characterisitc of different clusters measured
+#regularly over time?
 #Discrete or categorical outcome, we chose categorical CPAP adherence
 #All patients and all time points were included
 
@@ -148,7 +150,7 @@ plot(LTA_final_model, what = "marginal")
 devtools::install_github("gitedric/trajeR")
 library(trajeR)
 #GBTM: how can we analyze clusters trajectories to study and predict variations
-#over time
+#over time?
 #In columns: patient id, CPAP adherence (numeric), time points (numeric)
 #All patients but only 5 time points were included (faster calculation)
 
@@ -219,7 +221,7 @@ questionr::freq(Group_N$group)
 #--------------------GMM method-------------------------------------------------
 #source: file:///C:/Users/HP2/Downloads/GMM%20in%20R_Dec2022_v2.pdf
 library(lcmm)
-#GMM: how can we describe trajectories of longitudinal data with repeated measurement
+#GMM: how can we described trajectories of longitudinal data with repeated measurement
 #of follow-up?
 #Continuous data for CPAP adherence
 #All patients but only 5 time points were included (long runtimes with many time points)
