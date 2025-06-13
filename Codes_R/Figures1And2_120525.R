@@ -29,7 +29,8 @@ Sim_CPAP_chrono <- Sim_CPAP_cat %>%
   select('T1':'T5')
 
 seqdplot(seqdef(Sim_CPAP_chrono), cex.plot=1.3, cex.legend = 1,
-         cpal = c('#2171B5', '#6BAED6','#C6DBEF'))
+         cpal = c('#2171B5', '#6BAED6','#C6DBEF'), withlegend = 'right',
+         legend.prop = 0.2)
 
 #B: Alluvial plot
 #3 time points
@@ -100,7 +101,7 @@ ggplot(Sim_CPAP_boxplot, aes(x = Months, y = `CPAP adherence`, color = patient_i
   theme_classic() +
   ylab('CPAP adherence (h/night)') +
   labs(colour = 'Patient') +
-  scale_color_manual(values = c('#DEEBF7', '#9ECAE1', '#4292C6', '#08519C', '#08306B')) +
+  scale_color_manual(values = c('#6BAED6', '#35C2DD', '#2171B5', '#2D88A6', '#08306B')) +
   theme(axis.title.x = element_text(size = 15), axis.text.x = element_text(size = 15),
         axis.title.y = element_text(size = 15),axis.text.y = element_text(size = 15),
         legend.title = element_text(size = 15),legend.text = element_text(size = 15))
@@ -113,10 +114,10 @@ Sim_CPAP_survival <- Sim_CPAP %>%
   pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
   mutate_at(vars(patient_id), as.factor) %>%
   mutate_at(vars(Time), ~as.numeric(as.factor(.x))) %>%
-  mutate_at(vars(CPAP_adherence), ~ifelse(.x >= 4, 1, 0)) %>%
+  mutate_at(vars(CPAP_adherence), ~ifelse(.x == 0, 1, 0)) %>%
   group_by(patient_id) %>%
   summarise(Time = ifelse(max(CPAP_adherence) == 1, which.max(CPAP_adherence), max(Time)),
-            CPAP_adherence = ifelse(Time == 90, 0, CPAP_adherence)) 
+            CPAP_adherence = max(CPAP_adherence)) 
 
 fit1 <- survfit(Surv(Time, CPAP_adherence) ~ 1, data = Sim_CPAP_survival)
 p1 <- ggsurvplot(fit1, data = Sim_CPAP_survival, risk.table = T, palette = c('#08519C'))  
