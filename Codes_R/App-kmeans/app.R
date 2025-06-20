@@ -7,7 +7,7 @@ library(ggplot2)
 
 
 #Data set/data preparation
-load('Sim_CPAP.RData')
+load('../../Data/300Patients_90TimePoints/Sim_CPAP.RData')
 
 
 clus_KML <- cld(Sim_CPAP, timeInData = 2:91, maxNA = 1, idAll = Sim_CPAP$patient_id)

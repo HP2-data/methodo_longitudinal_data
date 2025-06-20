@@ -71,7 +71,7 @@ T1 <- table(Sim_ESS_cat$T1, Sim_CPAP_cat$T1)
 T2 <- table(Sim_ESS_cat$T2, Sim_CPAP_cat$T2)
 
 #Final table with all data information
-Chi2_test <- array(c(32,36, 107, 11, 30, 84, 31, 33, 110, 9, 33, 84),
+Chi2_test <- array(c(32, 36, 107, 11, 30, 84, 31, 33, 110, 9, 33, 84),
                    dim = c(3, 2, 2),
                    dimnames = list(Adherence = c('[0h, 2h[', '[2h, 4h[', '\u2265 4h'),
                                                     ESS_score = c('No', 'Yes'),
