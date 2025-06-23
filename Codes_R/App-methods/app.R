@@ -1,3 +1,8 @@
+#23/06/2025
+#Longitudinal data, trajectories and time series: how to analyze them?
+#An example of sleep data
+
+#Packages
 library(shiny)
 library(bslib)
 library(dplyr)
@@ -7,26 +12,34 @@ library(DT)
 library(ggplot2)
 library(rstatix)
 library(Hmisc)
+library(LMest)
+#devtools::install_github("gitedric/trajeR")
+library(trajeR)
+library(lcmm)
+library(lme4)
+library(survival)
+library(survminer)
+library(forecast)
+library(depmixS4)
+select <- dplyr::select
 
+source("../functions.R")
 
 #Data set/data preparation
-load('../../Data/300Patients_90TimePoints/Sim_CPAP.RData')
-load('../../Data/300Patients_90TimePoints/ANOVA_df.RData')
-load('../../Data/300Patients_90TimePoints/Sim_CPAP_cat.RData')
-load('../../Data/300Patients_90TimePoints/Sim_ESS_cat.RData')
+load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_CPAP.RData')
+load('../../Data/300Patients_90TimePoints/R_shiny_app_data/ANOVA_df.RData')
+load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_CPAP_cat.RData')
+load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_ESS_cat.RData')
+load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_ESS.RData')
 
 clus_KML <- cld(Sim_CPAP, timeInData = 2:91, maxNA = 1, idAll = Sim_CPAP$patient_id)
 
 
+#R shiny application
 ui <- page_navbar(
   title = 'Statistical methods to analyse longitudinal data',
   
   sidebar = sidebar(
-    sliderInput(inputId = 'nbClusters',
-                label = 'Kmeans - Number of clusters:',
-                min = 2,
-                max = 5,
-                value = 3),
     sliderInput(inputId = 'TimePoint',
                 label = 'ANOVA/Chi2 - Time points:',
                 min = 1,
@@ -34,14 +47,18 @@ ui <- page_navbar(
                 value = 1),
     radioButtons(inputId = 'TimePoint2',
               label = 'Chi2 - Time points:',
-              c('T1' = 'T1', 'T2' = 'T2'))),
+              c('T1' = 'T1', 'T2' = 'T2')),
+    sliderInput(inputId = 'nbClusters',
+              label = 'Kmeans/LTA/GBTM/GMM - Number of clusters:',
+              min = 2,
+              max = 5,
+              value = 3),
+    sliderInput(inputId = 'Degree',
+                label = 'GBTM - Degree of the curve:',
+                min = 1,
+                max = 3,
+                value = 2)),
 
-  nav_panel(
-    title = 'Kmeans method',
-    accordion_panel("Table: Patients' cluster membership",
-                    DTOutput(outputId = 'clus_table')),
-    accordion_panel('Plot: Number of patients per cluster ',
-                    plotOutput(outputId = 'clus_plot'))),
   nav_panel(
     title = 'ANOVA methods',
     accordion_panel("Table: Comparison of CPAP adherence at different time points",
@@ -49,9 +66,70 @@ ui <- page_navbar(
     accordion_panel('Plot: Normal values assumption',
                     plotOutput(outputId = 'ANOVA_plot'))),
   nav_panel(
-    title = 'Chi² methods',
-    accordion_panel("Table: Comparison of CPAP adherence and ESS score at 2 time points",
-                    verbatimTextOutput(outputId = 'chi2_print')))
+    title = 'Chi² method',
+    "Comparison of CPAP adherence and ESS score at 2 time points",
+    verbatimTextOutput(outputId = 'chi2_print')),
+  nav_panel(
+    title = 'Kmeans method',
+    accordion_panel("Table: Patients' cluster membership",
+                    DTOutput(outputId = 'clus_table')),
+    accordion_panel('Plot: Number of patients per cluster ',
+                    plotOutput(outputId = 'clus_plot'))),
+  nav_panel(title = 'LTA method',
+            accordion_panel('Table: LTA method parameters',
+                            verbatimTextOutput(outputId = 'LTA_table')),
+            accordion_panel('Plot: Transition probabilities',
+            plotOutput(outputId = 'LTA_plot'))),
+  nav_panel(title = 'GBTM method',
+            accordion_panel("Table: Choice of method's parameters",
+                            verbatimTextOutput(outputId = 'GBTM_table')),
+            accordion_panel('Plot: Clusters trajectories',
+                            plotOutput(outputId = 'GBTM_plot')),
+            accordion_panel('Plot: Number of patients in each cluster',
+                            plotOutput(outputId = 'GBTM_plot2'))),
+  nav_panel(title = 'GMM method',
+            accordion_panel('Table: GMM method parameters',
+                            DTOutput(outputId = 'GMM_table'))),
+  nav_panel(title = 'Mixed method',
+            accordion_panel('Table: linear mixed model',
+                            verbatimTextOutput(outputId = 'Mixed_table')),
+            accordion_panel('Plot: Association between outcome and factors',
+                            plotOutput(outputId = 'Mixed_plot'))),
+  nav_panel(title = 'Survival method',
+              accordion_panel('Plot: Survival probabilitiy to use CPAP over the study',
+                              plotOutput((outputId = 'Survival_plot'))),
+              accordion_panel("Plot: Survival probability to use CPAP over the study according to patients' sleepiness status",
+                              plotOutput(outputId = 'Survival_plot2')),
+              accordion_panel('Table: Comparison test for the use of CPAP over the study acording to groups of sleepiness patients',
+                              verbatimTextOutput(outputId = 'Survival_table'))),
+  nav_panel(title = 'ARIMA and Cross-correlation method',
+            accordion_panel('Plot: ACF, PACF and time series for CPAP adherence',
+                            plotOutput(outputId = 'ARIMA_plotCPAP')),
+            accordion_panel('Plot: ACF, PACF and time series for ESS score',
+                            plotOutput(outputId = 'ARIMA_plotESS')),
+            accordion_panel('Table: ARIMA parameters for CPAP adherence',
+                            verbatimTextOutput(outputId = 'ARIMA_tableCPAP')),
+            accordion_panel('Table: ARIMA parameters for ESS score',
+                            verbatimTextOutput(outputId = 'ARIMA_tableESS')),
+            accordion_panel('Plot: QQplot to test normality distribution of CPAP adherence values',
+                            plotOutput(outputId = 'ARIMA_plot2CPAP')),
+            accordion_panel('Plot: ACF for ESS score values',
+                            plotOutput(outputId = 'ARIMA_plot2ESS')),
+            accordion_panel('Table: Ljung-Box test for CPAP adherence',
+                            verbatimTextOutput(outputId = 'ARIMA_table2CPAP')),
+            accordion_panel('Table: Ljung-Box test for ESS score',
+                            verbatimTextOutput(outputId = 'ARIMA_table2ESS')),
+            accordion_panel('Plot: Lags',
+                            plotOutput(outputId = 'CCF_plot')),
+            accordion_panel('Table: Linear regression association',
+                            verbatimTextOutput(outputId = 'CCF_table'))),
+  nav_panel(title = 'HMM method',
+            accordion_panel('Table: HMM parameters',
+                            verbatimTextOutput(outputId = 'HMM_table')),
+            accordion_panel('Plot: State trajectory over time',
+                            plotOutput(outputId = 'HMM_plot')),
+            accordion_panel('Plot: Number of time points spent in each state',
+                            plotOutput(outputId = 'HMM_plot2')))
 )
 
 
@@ -123,6 +201,334 @@ server <- function(input, output){
           round(mantelhaen.test(Chi2_test, correct = F)$p.value, 3)))
        }
   }) 
+  
+  ##LTA method
+  Sim_CPAP_LTA <- Sim_CPAP_cat %>%
+    select(patient_id, T1:T90) %>%
+    pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+    mutate_at(vars(patient_id, Time, CPAP_adherence), as.factor) %>%
+    separate(Time, sep = 1, into = c('T', 'Time')) %>%
+    select(-'T') %>%
+    mutate_all(as.numeric) %>%
+    as.data.frame()
+  
+  output$LTA_table <- renderPrint({
+    
+  nbClusters <- input$nbClusters
+  model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
+        start = 1, seed = 123, maxit = 5000, modBasic = 1, k = nbClusters)
+  
+  summary(model)
+  })
+
+  output$LTA_plot <- renderPlot({
+    
+    nbClusters <- input$nbClusters
+    model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
+                   start = 1, seed = 123, maxit = 5000, modBasic = 1, k = nbClusters)
+    
+    plot(model, what = "transitions")
+
+  })
+  
+  ##GBTM method
+  Sim_ESS_GBTM <- Sim_ESS %>%
+    rename(ESS_baseline = T1) %>%
+    mutate_at(vars(ESS_baseline, patient_id), as.factor)
+  
+  Sim_CPAP_GBTM <- Sim_CPAP %>%
+    mutate_at(vars(patient_id), as.factor) %>%
+    select(patient_id, T1:T5) %>%
+    mutate(Time1 = 1, Time2 = 2, Time3 = 3, Time4 = 4, Time5 = 5) %>%
+    left_join(select(Sim_ESS_GBTM, patient_id, ESS_baseline))
+ 
+  output$GBTM_table <- renderPrint({
+    
+    nbClusters <- input$nbClusters
+    Degree <- input$Degree
+    GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
+                        degre = rep(Degree, nbClusters), Model = 'CNORM')
+    
+    print(paste0('BIC: ',round(trajeRBIC(GBTM_test), 2),
+                 ' and AIC: ', round(trajeRAIC(GBTM_test), 2)))
+    
+    adequacy(GBTM_test, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
+  
+  })
+  
+  output$GBTM_plot <- renderPlot({
+    nbClusters <- input$nbClusters
+    Degree <- input$Degree
+    GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
+                        degre = rep(Degree, nbClusters), Model = 'CNORM')
+    
+    plotrajeR(GBTM_test)
+  
+    })
+  
+    output$GBTM_plot2 <- renderPlot({
+      
+      nbClusters <- input$nbClusters
+      Degree <- input$Degree
+      GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
+                          degre = rep(Degree, nbClusters), Model = 'CNORM')
+      
+      Group_N <- GroupProb(GBTM_test, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
+
+      Group_N <- Group_N %>%
+        as.data.frame() %>%
+        rowwise() %>%
+        mutate(group = which.max(c_across(Gr1:paste0('Gr',nbClusters)))) %>%
+        mutate_at(vars(group), as.factor)
+    
+      ggplot(Group_N, aes(x = group)) +
+        geom_bar(stat = 'count') +
+        theme_classic() +
+        xlab('Clusters') + 
+        ylab('Number of patients')
+
+    })
+    
+    #GMM method
+    Sim_CPAP_GMM <- Sim_CPAP %>%
+      select(patient_id, T1:T5) %>%
+      pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+      mutate_at(vars(patient_id), as.numeric)
+    
+    output$GMM_table <- renderDT({
+      
+      nbClusters <- input$nbClusters
+    
+      set.seed(123)
+      GMM_test1 <- hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                        random = ~ 1 + Time, ng = 1, data = Sim_CPAP_GMM)
+      GMM_test <-  gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
+                              hlme(CPAP_adherence ~ Time, subject = 'patient_id',
+                                   random = ~ 1 + Time, ng = nbClusters, data = Sim_CPAP_GMM,
+                                   mixture = ~ Time, nwg = T))
+      
+      summarytable(GMM_test1, GMM_test)
+     
+      postprob(GM_test)
+    
+    })
+    
+    ##Mixed model
+    Sim_CPAP_mixed <- Sim_CPAP %>%
+      pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+      mutate_at(vars(patient_id, Time), as.factor) %>%
+      separate(Time, sep = 1, into = c('T', 'Time')) %>%
+      select(-'T') %>%
+      mutate_at(vars(Time), ~ factor(.x, levels = sort(unique(as.numeric(.x))))) %>% #ordered values
+      mutate_at(vars(Time), as.numeric) 
+    
+    Sim_ESS_mixed <- Sim_ESS_cat %>%
+      select(T1, patient_id) %>%
+      mutate_at(vars(patient_id, T1), as.factor)
+    
+    Sim_CPAP_mixed <- Sim_CPAP_mixed %>%
+      left_join(Sim_ESS_mixed, by = 'patient_id') %>%
+      rename(ESS_baseline = T1)
+    
+    output$Mixed_table <- renderPrint({
+      
+      Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
+                       data = Sim_CPAP_mixed)
+      summary(Mixed_test)
+    
+    })
+    
+    output$Mixed_plot <- renderPlot({
+      
+      Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
+                         data = Sim_CPAP_mixed)
+      sjPlot::plot_model(Mixed_test)
+      
+    })
+    
+    ##Survival method
+    Sim_CPAP_survival <- Sim_CPAP %>%
+      pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+      mutate_at(vars(patient_id), as.factor) %>%
+      mutate_at(vars(Time), ~as.numeric(as.factor(.x))) %>%
+      mutate_at(vars(CPAP_adherence), ~ifelse(.x == 0, 1, 0)) %>%
+      group_by(patient_id) %>%
+      summarise(Time = ifelse(max(CPAP_adherence) == 1, which.max(CPAP_adherence), max(Time)),
+                CPAP_adherence = max(CPAP_adherence))  
+    
+    Sim_ESS_joint <- Sim_ESS_cat %>%
+      select(patient_id, T1) %>%
+      rename(Drowsy = T1) %>%
+      mutate_at(vars(patient_id), as.factor) 
+    
+    Sim_CPAP_survival <- Sim_CPAP_survival %>%
+      left_join(Sim_ESS_joint)
+    
+    output$Survival_plot <- renderPlot({
+      
+      fit <- survfit(Surv(Time, CPAP_adherence) ~ 1, data = Sim_CPAP_survival)
+      ggsurvplot(fit, risk.table = T)
+    
+      })
+
+    output$Survival_plot2 <- renderPlot({
+      
+      fit <- survfit(Surv(Time, CPAP_adherence) ~ Drowsy, data = Sim_CPAP_survival)
+      ggsurvplot(fit, risk.table = T)
+    
+    })
+    
+    output$Survival_table <- renderPrint({
+      
+      survdiff(Surv(Time, CPAP_adherence) ~ Drowsy, data = Sim_CPAP_survival)
+    
+      })
+    
+    ##ARIMA and Cross-correlation method
+    Sim_CPAP_ARIMA <- Sim_CPAP %>%
+      select(patient_id, T1:T90) %>%
+      filter(patient_id == 10) %>%
+      pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
+      mutate_at(vars(patient_id), as.factor) %>%
+      separate(Time, sep = 1, into = c('T', 'Time')) %>%
+      select(-c('T', 'patient_id'))
+    
+    Sim_ESS_ARIMA <- sim_data_discrete(300, 90, 24) %>%
+      select(patient_id, T1:T90) %>%
+      filter(patient_id == 10) %>%
+      pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'ESS_score') %>%
+      mutate_at(vars(patient_id), as.factor) %>%
+      separate(Time, sep = 1, into = c('T', 'Time')) %>%
+      select(-c('T', 'patient_id'))
+    
+    ts_CPAP <- ts(Sim_CPAP_ARIMA$CPAP_adherence)
+    ts_ESS <- ts(Sim_ESS_ARIMA$ESS_score)
+    
+    ARIMA_CPAP <- auto.arima(ts_CPAP)
+    ARIMA_ESS <- auto.arima(ts_ESS)
+    
+    ESS_res <- ARIMA_ESS$residuals
+    CPAP_res <- ARIMA_CPAP$residuals
+    CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
+    
+    output$ARIMA_plotCPAP <- renderPlot({
+      fUnitRoots::urkpssTest(ts_CPAP, type = c("tau"), lags = c("short"),
+                             use.lag = NULL, doplot = TRUE)
+    })
+    
+    output$ARIMA_plotESS <- renderPlot({
+      fUnitRoots::urkpssTest(ts_ESS, type = c("tau"), lags = c("short"),
+                             use.lag = NULL, doplot = TRUE)
+    })
+    
+    output$ARIMA_tableCPAP <- renderPrint({
+      summary(ARIMA_CPAP)
+    })
+    
+    output$ARIMA_tableESS <- renderPrint({  
+      summary(ARIMA_ESS) 
+    })
+    
+    output$ARIMA_plot2CPAP <- renderPlot({
+      qqnorm(ARIMA_CPAP$residuals)
+      qqline(ARIMA_CPAP$residuals)
+    })
+    
+    output$ARIMA_plot2ESS <- renderPlot({
+      acf(ARIMA_ESS$residuals)
+    })
+    
+    output$ARIMA_table2CPAP <-renderPrint({
+      Box.test(ARIMA_CPAP$residuals, type = 'Ljung-Box')
+    })
+    
+    output$ARIMA_table2ESS <-renderPrint({
+      Box.test(ARIMA_ESS$residuals, type = 'Ljung-Box')
+    })
+    
+    output$CCF_plot <- renderPlot({
+      plot(CCF_CPAP_ESS)
+      })
+
+    output$CCF_table <- renderPrint({
+      lag <- stats::lag
+      final_data <- ts.intersect(ESS_res, CPAPlag14 = lag(CPAP_res, 14))
+    
+      reg_CCF <- lm(ESS_res ~ CPAPlag14, data = final_data)
+      summary(reg_CCF)
+      })
+    
+    
+    ##Hiden Markov Model
+    Sim_CPAP_HMM <- Sim_CPAP_cat %>%
+      filter(patient_id %in% seq(100, 300)) %>%
+      mutate_at(vars('T1':'T90'), ~ as.numeric(as.factor(.x))) %>%
+      pivot_longer(cols = c('T1':'T90'), names_to = 'Time', values_to = 'CPAP_adherence')
+
+    ntimes <- Sim_CPAP_HMM %>%
+      group_by(patient_id) %>%
+      summarise(N = length(CPAP_adherence))
+    
+    Sim_CPAP_HMM <- Sim_CPAP_HMM %>%
+      arrange(patient_id)
+
+    HMM_test <- depmix(response = CPAP_adherence ~ 1, family = multinomial(), nstates = 2,
+                       data = Sim_CPAP_HMM, ntimes = ntimes$N)
+    
+    set.seed(123)
+    HMM_final <- fit(HMM_test)
+  
+    output$HMM_table <- renderPrint({
+      print(paste0('BIC: ', round(BIC(HMM_final), 2), ', AIC: ', round(AIC(HMM_final),2),
+             ' and Loglikelihood: ', round(logLik(HMM_final), 2)))
+      
+      init_prob <- matrix(getpars(HMM_final)[1:2], nrow = 1, byrow = T)
+      colnames(init_prob) <- c('Non adherent', 'Adherent')
+      print('Initial state probability')
+      print(init_prob)
+      
+      trans_prob <- matrix(getpars(HMM_final)[3:6], nrow = 2, byrow = T)
+      colnames(trans_prob) <- c('Non adherent', 'Adherent')
+      rownames(trans_prob) <- c('Non adherent', 'Adherent')
+      print('Transition matrix')
+      print(trans_prob)
+      
+      pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
+      print('Predict the hidden states up to 200 time points')
+      print(pred_states)
+    })
+  
+    output$HMM_plot <- renderPlot({
+      
+      pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
+      ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
+        geom_line() +
+        ylab('State prediction') +
+        xlab('Time points') +
+        theme_classic() + 
+        scale_y_discrete(breaks = c(1, 2), limits = factor(c(1, 2)))
+    })
+    
+    pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
+    
+    output$HMM_plot <- renderPlot({
+      ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
+        geom_line() +
+        ylab('State prediction') +
+        xlab('Time points') +
+        theme_classic() + 
+        scale_y_discrete(breaks = c(1, 2), limits = factor(c(1, 2)))
+    })
+    
+    output$HMM_plot2 <- renderPlot({
+      pred_states <- pred_states %>%
+        mutate_at(vars(state), as.factor)
+      
+      ggplot(pred_states, aes(x = state)) +
+        geom_bar(stat = 'count') + 
+        theme_classic()
+    })
+    
 }
 
 shinyApp(ui = ui, server = server)

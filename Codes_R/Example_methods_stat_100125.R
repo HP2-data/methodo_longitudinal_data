@@ -325,7 +325,7 @@ library(survminer) #For ggsurvplot() function; plot the survival models
 #The dead of the patient is the moment when its CPAP adherence is >= 4h
 #Time = max between time when CPAP adherence == 1 and T90 (the end of the study)
 #So the status is dead (CPAP_adherence = 1) when CPAP adherence >= 4h before the end of the study or 
-#censored (CPAp_adherence = 0) when CPAP adherence < 4h over the study
+#censored (CPAP_adherence = 0) when CPAP adherence < 4h over the study
 Sim_CPAP_survival <- Sim_CPAP %>%
   pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
   mutate_at(vars(patient_id), as.factor) %>%
@@ -342,7 +342,7 @@ ggsurvplot(fit, risk.table = T)
 
 #Data set for survival plot according to drowsy status
 #ESS score: Drowsy patient = (ESS >= 10) = 0 /  Non-drowsy patient = (ESS < 10) = 1
-#Time = max between time when ESS score == 1 and T7 (the end of the study)
+#Time = max between time when ESS score == 1 and T90 (the end of the study)
 Sim_ESS_joint <- Sim_ESS_cat %>%
   select(patient_id, T1) %>%
   rename(Drowsy = T1) %>%
