@@ -7,6 +7,8 @@ Describe the main statistical methods for analyzing longitudinal data.
 Depending on the type and source of the data, what is the best method to use for data analysis?   
 Example on sleep data - CPAP adherence and Epworth Sleepiness Scale (ESS) score.
 
+Please note! The GMM method takes a long time to run, especially when the number of clusters is $\ge 3$
+
 ## Authors
 Ophélie Coiffier  
 Ina Jandric   
@@ -18,5 +20,8 @@ Sébastien Bailly
 ## License
 CC-BY-4.0
 
+## Session info
+This analysis was performed using R 4.3.0. For more details about the session info, see the 'sessionInfo.txt' file.
+
 ## Project status
-Article in progress - 05/28/2025
+Article in progress - 06/24/2025

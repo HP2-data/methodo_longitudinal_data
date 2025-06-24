@@ -70,8 +70,14 @@ get_anova_table(anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id,
 T1 <- table(Sim_ESS_cat$T1, Sim_CPAP_cat$T1)
 T2 <- table(Sim_ESS_cat$T2, Sim_CPAP_cat$T2)
 
+tableTimePoint1 <- t(table(as.matrix(select(Sim_ESS_cat, 'T1')),
+                           as.matrix(select(Sim_CPAP_cat, 'T1'))))
+
+tableTimePoint2 <- t(table(as.matrix(select(Sim_ESS_cat, 'T2')),
+                           as.matrix(select(Sim_CPAP_cat, 'T2'))))
+
 #Final table with all data information
-Chi2_test <- array(c(32, 36, 107, 11, 30, 84, 31, 33, 110, 9, 33, 84),
+Chi2_test <- array(c(tableTimePoint1, tableTimePoint2),
                    dim = c(3, 2, 2),
                    dimnames = list(Adherence = c('[0h, 2h[', '[2h, 4h[', '\u2265 4h'),
                                                     ESS_score = c('No', 'Yes'),
@@ -250,8 +256,9 @@ GMM_test4 <- gridsearch(rep = 100, maxiter = 10, minit = GMM_test1,
                         hlme(CPAP_adherence ~ Time, subject = 'patient_id',
                              random = ~ 1 + Time, ng = 4, data = Sim_CPAP_GMM,
                              mixture= ~ Time, nwg = T))
-summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
 
+#Parameters for choosing the best model
+summarytable(GMM_test1, GMM_test2, GMM_test3, GMM_test4)
 #Better BIC = 4 clusters, distribution of patients ok
 summary(GMM_test4)
 
@@ -486,7 +493,7 @@ colnames(trans_prob) <- c('Non adherent', 'Adherent')
 rownames(trans_prob) <- c('Non adherent', 'Adherent')
 trans_prob
 
-#Predict the hidden states up to 100 time points
+#Predict the hidden states up to 200 time points
 pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
 pred_states
 

@@ -2,7 +2,7 @@
 #Longitudinal data, trajectories and time series: how to analyze them?
 #An example of sleep data
 
-#Packages
+#--------------------------Packages---------------------------------------------
 library(shiny)
 library(bslib)
 library(dplyr)
@@ -25,17 +25,20 @@ select <- dplyr::select
 
 source("../functions.R")
 
-#Data set/data preparation
+#-------------------------Data set/data preparation-----------------------------
 load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_CPAP.RData')
-load('../../Data/300Patients_90TimePoints/R_shiny_app_data/ANOVA_df.RData')
 load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_CPAP_cat.RData')
 load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_ESS_cat.RData')
 load('../../Data/300Patients_90TimePoints/R_shiny_app_data/Sim_ESS.RData')
 
+Sim_CPAP <- read.csv("C:/Users/HP2/Desktop/Methodo_stat_donnees/Data/300Patients_90TimePoints/Sim_CPAP.csv",
+                     sep=";")
 clus_KML <- cld(Sim_CPAP, timeInData = 2:91, maxNA = 1, idAll = Sim_CPAP$patient_id)
 
 
-#R shiny application
+#----------------------------R shiny application--------------------------------
+#Prepare the page setting using sidebar, accordion results, etc.
+###ui
 ui <- page_navbar(
   title = 'Statistical methods to analyse longitudinal data',
   
@@ -58,7 +61,7 @@ ui <- page_navbar(
                 min = 1,
                 max = 3,
                 value = 2)),
-
+  
   nav_panel(
     title = 'ANOVA methods',
     accordion_panel("Table: Comparison of CPAP adherence at different time points",
@@ -88,8 +91,8 @@ ui <- page_navbar(
             accordion_panel('Plot: Number of patients in each cluster',
                             plotOutput(outputId = 'GBTM_plot2'))),
   nav_panel(title = 'GMM method',
-            accordion_panel('Table: GMM method parameters',
-                            DTOutput(outputId = 'GMM_table'))),
+            'Table: GMM method parameters',
+            verbatimTextOutput(outputId = 'GMM_table')),
   nav_panel(title = 'Mixed method',
             accordion_panel('Table: linear mixed model',
                             verbatimTextOutput(outputId = 'Mixed_table')),
@@ -132,45 +135,24 @@ ui <- page_navbar(
                             plotOutput(outputId = 'HMM_plot2')))
 )
 
-
+#Functions to be executed to obtain the results of each statistical method
+###server
 server <- function(input, output){
   
-  ##Kmeans method
-  output$clus_table <- renderDT({
-    nbClusters <- input$nbClusters
-    
-    kml(clus_KML, nbClusters = nbClusters, nbRedrawing = 15)
-    
-    Sim_CPAP %>%
-      mutate('CPAP adherence clusters' = getClusters(clus_KML, nbCluster = nbClusters)) %>%
-      select(patient_id, 'CPAP adherence clusters') %>%
-      rename(Patient = patient_id)
-    
-  })
-  
-  output$clus_plot <- renderPlot({
-    nbClusters <- input$nbClusters
-    
-    kml(clus_KML, nbClusters = nbClusters, nbRedrawing = 15)
-    
-    Sim_CPAP <- Sim_CPAP %>%
-      mutate(Clusters_obs = getClusters(clus_KML, nbCluster = nbClusters)) %>%
-      select(patient_id, Clusters_obs)
-    
-    ggplot(Sim_CPAP, aes(x = Clusters_obs)) +
-      geom_bar(stat = 'count') +
-      theme_classic() +
-      xlab('Clusters') + 
-      ylab('Number of patients')
-  })
-  
   ##ANOVA method
+    #Data set
+  ANOVA_df <- Sim_CPAP %>%
+    pivot_longer(cols = T1:T90, names_to = 'time', values_to = 'Adherence') %>%
+    mutate_at(vars(patient_id, time), as.factor)
+  
   output$ANOVA_table <- renderDT({
+    #ANOVA test
     get_anova_table(anova_test(data = ANOVA_df, dv = Adherence, wid = patient_id,
                                within = time))
   })
   
   output$ANOVA_plot <- renderPlot({
+    #Normal values assumption
     TimePoint <- paste0('T', input$TimePoint)
     ggpubr::ggqqplot(ANOVA_df[ANOVA_df$time == TimePoint,], 'Adherence',
                      title = paste0('Time point ', TimePoint))
@@ -178,14 +160,15 @@ server <- function(input, output){
   
   ##Chi² method
   output$chi2_print <- renderPrint({
-    
+      #Comparison test between the ESS score (with 2 available questionnaires) and
+      #CPAP adherence (the 1st two time points)
     TimePoint <- paste0('T', input$TimePoint)
     TimePoint2 <- input$TimePoint2
     
     if(TimePoint %nin% c('T1', 'T2')){
            print('Time point must be 1 or 2 !')}
        else{
-           
+      #Contingency table
     tableTimePoint1 <- t(table(as.matrix(select(Sim_ESS_cat, TimePoint)),
                              as.matrix(select(Sim_CPAP_cat, TimePoint))))
     
@@ -202,7 +185,38 @@ server <- function(input, output){
        }
   }) 
   
+  ##Kmeans method
+  output$clus_table <- renderDT({
+    #Number of clusters
+    nbClusters <- input$nbClusters
+    
+    #K-means function
+    kml(clus_KML, nbClusters = nbClusters, nbRedrawing = 15)
+  })
+  
+  output$clus_plot <- renderPlot({
+    #Number of clusters
+    nbClusters <- input$nbClusters
+    
+    #Data set
+    Sim_CPAP %>%
+      mutate('CPAP adherence clusters' = getClusters(clus_KML, nbCluster = nbClusters)) %>%
+      select(patient_id, 'CPAP adherence clusters') %>%
+      rename(Patient = patient_id)
+    
+    #K-means function
+    kml(clus_KML, nbClusters = nbClusters, nbRedrawing = 15)
+    
+    #Number of patients per cluster
+    ggplot(Sim_CPAP, aes(x = Clusters_obs)) +
+      geom_bar(stat = 'count') +
+      theme_classic() +
+      xlab('Clusters') + 
+      ylab('Number of patients')
+  })
+  
   ##LTA method
+    #Data set
   Sim_CPAP_LTA <- Sim_CPAP_cat %>%
     select(patient_id, T1:T90) %>%
     pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
@@ -213,25 +227,30 @@ server <- function(input, output){
     as.data.frame()
   
   output$LTA_table <- renderPrint({
-    
-  nbClusters <- input$nbClusters
-  model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
-        start = 1, seed = 123, maxit = 5000, modBasic = 1, k = nbClusters)
-  
-  summary(model)
-  })
-
-  output$LTA_plot <- renderPlot({
-    
+    #Number of patients
     nbClusters <- input$nbClusters
+    
+    #LTA function
     model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
                    start = 1, seed = 123, maxit = 5000, modBasic = 1, k = nbClusters)
     
-    plot(model, what = "transitions")
+    summary(model)
+  })
 
+  output$LTA_plot <- renderPlot({
+    #Number of clusters
+    nbClusters <- input$nbClusters
+    
+    #LTA function
+    model <- lmest(data = Sim_CPAP_LTA, index = c('patient_id', 'Time'),
+                   start = 1, seed = 123, maxit = 5000, modBasic = 1, k = nbClusters)
+    
+    #Transitions probability
+    plot(model, what = "transitions")
   })
   
   ##GBTM method
+    #Data set
   Sim_ESS_GBTM <- Sim_ESS %>%
     rename(ESS_baseline = T1) %>%
     mutate_at(vars(ESS_baseline, patient_id), as.factor)
@@ -243,12 +262,17 @@ server <- function(input, output){
     left_join(select(Sim_ESS_GBTM, patient_id, ESS_baseline))
  
   output$GBTM_table <- renderPrint({
-    
+    #Number of clusters
     nbClusters <- input$nbClusters
+    
+    #Degree of trajectory curve
     Degree <- input$Degree
+    
+    #GBTM function
     GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
                         degre = rep(Degree, nbClusters), Model = 'CNORM')
     
+    #Assumptions verification
     print(paste0('BIC: ',round(trajeRBIC(GBTM_test), 2),
                  ' and AIC: ', round(trajeRAIC(GBTM_test), 2)))
     
@@ -257,22 +281,33 @@ server <- function(input, output){
   })
   
   output$GBTM_plot <- renderPlot({
+    #Number of clusters
     nbClusters <- input$nbClusters
+    
+    #Degree of trajectory curve
     Degree <- input$Degree
+    
+    #GBTM function
     GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
                         degre = rep(Degree, nbClusters), Model = 'CNORM')
     
+    #Trajectories
     plotrajeR(GBTM_test)
   
     })
   
     output$GBTM_plot2 <- renderPlot({
-      
+      #Number of clusters
       nbClusters <- input$nbClusters
+      
+      #Degree of trajectory curve
       Degree <- input$Degree
+      
+      #GBTM function
       GBTM_test <- trajeR(Sim_CPAP_GBTM[,2:6], Sim_CPAP_GBTM[,7:11], ng = nbClusters,
                           degre = rep(Degree, nbClusters), Model = 'CNORM')
       
+      #Cluster to which the patient belongs
       Group_N <- GroupProb(GBTM_test, Y = Sim_CPAP_GBTM[,2:6], A = Sim_CPAP_GBTM[,7:11])
 
       Group_N <- Group_N %>%
@@ -281,24 +316,26 @@ server <- function(input, output){
         mutate(group = which.max(c_across(Gr1:paste0('Gr',nbClusters)))) %>%
         mutate_at(vars(group), as.factor)
     
+      #Numer of patients per cluster
       ggplot(Group_N, aes(x = group)) +
         geom_bar(stat = 'count') +
         theme_classic() +
         xlab('Clusters') + 
         ylab('Number of patients')
-
     })
     
-    #GMM method
+    ##GMM method
+      #Data set
     Sim_CPAP_GMM <- Sim_CPAP %>%
       select(patient_id, T1:T5) %>%
       pivot_longer(cols = c(T1:T5), names_to = 'Time', values_to = 'CPAP_adherence') %>%
       mutate_at(vars(patient_id), as.numeric)
     
-    output$GMM_table <- renderDT({
-      
+    output$GMM_table <- renderPrint({
+      #Number of clusters
       nbClusters <- input$nbClusters
     
+      #GMM function
       set.seed(123)
       GMM_test1 <- hlme(CPAP_adherence ~ Time, subject = 'patient_id',
                         random = ~ 1 + Time, ng = 1, data = Sim_CPAP_GMM)
@@ -307,13 +344,18 @@ server <- function(input, output){
                                    random = ~ 1 + Time, ng = nbClusters, data = Sim_CPAP_GMM,
                                    mixture = ~ Time, nwg = T))
       
+      #Parameters for choosing the best model
       summarytable(GMM_test1, GMM_test)
-     
-      postprob(GM_test)
-    
+      
+      #A posterior probability of belonging to each cluster
+      postprob(GMM_test)
+      
+      #Model results
+      summary(GMM_test)
     })
     
     ##Mixed model
+      #Data set
     Sim_CPAP_mixed <- Sim_CPAP %>%
       pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
       mutate_at(vars(patient_id, Time), as.factor) %>%
@@ -330,23 +372,20 @@ server <- function(input, output){
       left_join(Sim_ESS_mixed, by = 'patient_id') %>%
       rename(ESS_baseline = T1)
     
-    output$Mixed_table <- renderPrint({
-      
-      Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
+    #Linear mixed regression
+    Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
                        data = Sim_CPAP_mixed)
-      summary(Mixed_test)
     
+    output$Mixed_table <- renderPrint({
+      summary(Mixed_test)
     })
     
     output$Mixed_plot <- renderPlot({
-      
-      Mixed_test <- lmer(CPAP_adherence ~ Time + ESS_baseline + (1 + Time | patient_id),
-                         data = Sim_CPAP_mixed)
       sjPlot::plot_model(Mixed_test)
-      
     })
     
     ##Survival method
+      #Data set
     Sim_CPAP_survival <- Sim_CPAP %>%
       pivot_longer(cols = c(T1:T90), names_to = 'Time', values_to = 'CPAP_adherence') %>%
       mutate_at(vars(patient_id), as.factor) %>%
@@ -365,26 +404,25 @@ server <- function(input, output){
       left_join(Sim_ESS_joint)
     
     output$Survival_plot <- renderPlot({
-      
+      #Survival function
       fit <- survfit(Surv(Time, CPAP_adherence) ~ 1, data = Sim_CPAP_survival)
       ggsurvplot(fit, risk.table = T)
-    
       })
 
     output$Survival_plot2 <- renderPlot({
-      
+      #Survival function / according to sleepiness status of patients
       fit <- survfit(Surv(Time, CPAP_adherence) ~ Drowsy, data = Sim_CPAP_survival)
       ggsurvplot(fit, risk.table = T)
     
     })
     
     output$Survival_table <- renderPrint({
-      
+      #Comparison test of CPAP use between drowsy and non-drowsy patients
       survdiff(Surv(Time, CPAP_adherence) ~ Drowsy, data = Sim_CPAP_survival)
-    
       })
     
     ##ARIMA and Cross-correlation method
+      #Data set
     Sim_CPAP_ARIMA <- Sim_CPAP %>%
       select(patient_id, T1:T90) %>%
       filter(patient_id == 10) %>%
@@ -401,56 +439,70 @@ server <- function(input, output){
       separate(Time, sep = 1, into = c('T', 'Time')) %>%
       select(-c('T', 'patient_id'))
     
+    #Time series creation
     ts_CPAP <- ts(Sim_CPAP_ARIMA$CPAP_adherence)
     ts_ESS <- ts(Sim_ESS_ARIMA$ESS_score)
     
+    #ARIMA function 
     ARIMA_CPAP <- auto.arima(ts_CPAP)
     ARIMA_ESS <- auto.arima(ts_ESS)
     
     ESS_res <- ARIMA_ESS$residuals
     CPAP_res <- ARIMA_CPAP$residuals
+    
+    #Cross-correlation function
     CCF_CPAP_ESS <- ccf(CPAP_res, ESS_res)
     
     output$ARIMA_plotCPAP <- renderPlot({
+      #Time series description
       fUnitRoots::urkpssTest(ts_CPAP, type = c("tau"), lags = c("short"),
                              use.lag = NULL, doplot = TRUE)
     })
     
     output$ARIMA_plotESS <- renderPlot({
+      #Time series description
       fUnitRoots::urkpssTest(ts_ESS, type = c("tau"), lags = c("short"),
                              use.lag = NULL, doplot = TRUE)
     })
     
     output$ARIMA_tableCPAP <- renderPrint({
+      #ARIMA parameters
       summary(ARIMA_CPAP)
     })
     
-    output$ARIMA_tableESS <- renderPrint({  
+    output$ARIMA_tableESS <- renderPrint({ 
+      #ARIMA parameters
       summary(ARIMA_ESS) 
     })
     
     output$ARIMA_plot2CPAP <- renderPlot({
+      #Normal values assumption
       qqnorm(ARIMA_CPAP$residuals)
       qqline(ARIMA_CPAP$residuals)
     })
     
     output$ARIMA_plot2ESS <- renderPlot({
+      #ACF function
       acf(ARIMA_ESS$residuals)
     })
     
     output$ARIMA_table2CPAP <-renderPrint({
+      #Test Ljung-Box to check residuals patterns
       Box.test(ARIMA_CPAP$residuals, type = 'Ljung-Box')
     })
     
     output$ARIMA_table2ESS <-renderPrint({
+      #Test Ljung-Box to check residuals patterns
       Box.test(ARIMA_ESS$residuals, type = 'Ljung-Box')
     })
     
     output$CCF_plot <- renderPlot({
+      #ACF of the cross-correlation 
       plot(CCF_CPAP_ESS)
       })
 
     output$CCF_table <- renderPrint({
+      #Linear regression using the results of cross-correlation method lags
       lag <- stats::lag
       final_data <- ts.intersect(ESS_res, CPAPlag14 = lag(CPAP_res, 14))
     
@@ -460,11 +512,13 @@ server <- function(input, output){
     
     
     ##Hiden Markov Model
+      #Data set
     Sim_CPAP_HMM <- Sim_CPAP_cat %>%
       filter(patient_id %in% seq(100, 300)) %>%
       mutate_at(vars('T1':'T90'), ~ as.numeric(as.factor(.x))) %>%
       pivot_longer(cols = c('T1':'T90'), names_to = 'Time', values_to = 'CPAP_adherence')
 
+      #To take into account patient_id: the lengths of individual, i.e. independent, time series.
     ntimes <- Sim_CPAP_HMM %>%
       group_by(patient_id) %>%
       summarise(N = length(CPAP_adherence))
@@ -472,6 +526,7 @@ server <- function(input, output){
     Sim_CPAP_HMM <- Sim_CPAP_HMM %>%
       arrange(patient_id)
 
+      #HMM function
     HMM_test <- depmix(response = CPAP_adherence ~ 1, family = multinomial(), nstates = 2,
                        data = Sim_CPAP_HMM, ntimes = ntimes$N)
     
@@ -479,39 +534,34 @@ server <- function(input, output){
     HMM_final <- fit(HMM_test)
   
     output$HMM_table <- renderPrint({
+      #Statistical verification of final states results
       print(paste0('BIC: ', round(BIC(HMM_final), 2), ', AIC: ', round(AIC(HMM_final),2),
              ' and Loglikelihood: ', round(logLik(HMM_final), 2)))
       
+      #Initial state probability
       init_prob <- matrix(getpars(HMM_final)[1:2], nrow = 1, byrow = T)
       colnames(init_prob) <- c('Non adherent', 'Adherent')
       print('Initial state probability')
       print(init_prob)
       
+      #Transition matrix
       trans_prob <- matrix(getpars(HMM_final)[3:6], nrow = 2, byrow = T)
       colnames(trans_prob) <- c('Non adherent', 'Adherent')
       rownames(trans_prob) <- c('Non adherent', 'Adherent')
       print('Transition matrix')
       print(trans_prob)
       
+      #Predict the hidden states up to 200 time points
       pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
       print('Predict the hidden states up to 200 time points')
       print(pred_states)
     })
   
-    output$HMM_plot <- renderPlot({
-      
-      pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
-      ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
-        geom_line() +
-        ylab('State prediction') +
-        xlab('Time points') +
-        theme_classic() + 
-        scale_y_discrete(breaks = c(1, 2), limits = factor(c(1, 2)))
-    })
-    
+    #Predict the hidden states up to 200 time points
     pred_states <- posterior(HMM_final, type = 'viterbi')[1:200,]
     
     output$HMM_plot <- renderPlot({
+      #Change of states during the study
       ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
         geom_line() +
         ylab('State prediction') +
@@ -521,6 +571,7 @@ server <- function(input, output){
     })
     
     output$HMM_plot2 <- renderPlot({
+      #Number of time points spent in each state
       pred_states <- pred_states %>%
         mutate_at(vars(state), as.factor)
       
@@ -531,4 +582,6 @@ server <- function(input, output){
     
 }
 
+#Run the app
+###Application
 shinyApp(ui = ui, server = server)
