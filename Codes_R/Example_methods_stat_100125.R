@@ -506,7 +506,11 @@ ggplot(pred_states, aes(y = state, x = seq(1, length(state)))) +
 
 questionr::freq(pred_states$state)
 
-#-------------------------RI-CLPM method----------------------------------------
+
+#-------------------Other more complex methods----------------------------------
+#Further examples of more complex methods
+
+##-------------------------RI-CLPM method---------------------------------------
 #source: https://rpubs.com/tpartridge/1204398
 library(lavaan)
 library(semPlot) #For the figure
@@ -668,7 +672,7 @@ summary(riclpm_fit, fit.measures = TRUE, standardized = TRUE)
 semPaths(riclpm_fit, "std", layout = "tree2", edge.label.cex = 0.8, curvePivot = TRUE)
 
 
-#-------------------------DTW method--------------------------------------------
+##-------------------------DTW method-------------------------------------------
 #source: https://dtw.r-forge.r-project.org/
 library(dtw)
 #DTW: how can we look at the similarity between 2 time series?
@@ -700,7 +704,7 @@ plot(dtw(Sim_CPAP_DTW[1:90], Sim_ESS_DTW[1:90], keep = T,
      type = "twoway", offset = -2, ylab = 'CPAP adherence', xlab = 'Measuring points')
 
 
-#--------------------LCA method-------------------------------------------------
+##--------------------LCA method------------------------------------------------
 library(poLCA)
 #LCA: how can we identify unmeasured clusters sharing common characteristics?
 #Categorical variables for CPAP adherence
@@ -738,7 +742,7 @@ LCA_test$probs
 plot_lca(LCA_test)
 
 
-#-------------------------Joint method------------------------------------------
+##-------------------------Joint method-----------------------------------------
 library(nlme) #For lme() function; fit the mixed model
 library(survival) #For Surv() and coxph() functions; fit survival models
 library(survminer) #For ggsurvplot() function; plot the survival models
