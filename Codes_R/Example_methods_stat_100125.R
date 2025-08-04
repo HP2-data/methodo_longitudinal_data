@@ -119,7 +119,7 @@ choice(clus_KML)
 #--------------------LTA method-------------------------------------------------
 #source: https://github.com/cran/LMest/blob/master/R/lmest.R
 library(LMest)
-#LTA: how can we compare the characterisitc of different clusters measured
+#LTA: how can we compare the characteristic of different clusters measured
 #regularly over time?
 #Discrete or categorical outcome, we chose categorical CPAP adherence
 #All patients and all time points were included
