@@ -24,4 +24,4 @@ CC-BY-4.0
 This analysis was performed using R 4.3.0. For more details about the session info, see the 'sessionInfo.txt' file.
 
 ## Project status
-Article in progress - 06/24/2025
+Article accepted for publication in Sleep Medicine - 10/17/2025
